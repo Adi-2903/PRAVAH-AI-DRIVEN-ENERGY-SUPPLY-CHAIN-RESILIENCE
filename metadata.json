@@ -1,6 +1,6 @@
 {
-  "name": "Energy Resilience AI",
-  "description": "An AI-powered dashboard for energy supply chain resilience, monitoring geopolitical and logistics risk signals, and simulating supply chain disruptions.",
+  "name": "Pravah AI",
+  "description": "An AI-powered dashboard for energy supply chain resilience, monitoring geopolitical and logistics risk signals.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

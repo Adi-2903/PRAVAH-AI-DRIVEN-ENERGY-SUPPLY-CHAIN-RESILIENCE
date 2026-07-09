@@ -1,6 +1,6 @@
 # Scenario Engine Backend
 
-This is the backend for the "AI-Driven Energy Supply Chain Resilience for Import-Dependent Economies" scenario engine. It is a FastAPI microservice that simulates how a supply-shock risk score for a corridor (e.g. Strait of Hormuz) propagates into Brent/WTI price movement, India's fuel prices at the pump, and GDP impact.
+This is the backend for the "Pravah: AI-Driven Energy Supply Chain Resilience" scenario engine. It is a FastAPI microservice that simulates how a supply-shock risk score for a corridor (e.g. Strait of Hormuz) propagates into Brent/WTI price movement, India's fuel prices at the pump, and GDP impact.
 
 ## Simulation Methodology
 

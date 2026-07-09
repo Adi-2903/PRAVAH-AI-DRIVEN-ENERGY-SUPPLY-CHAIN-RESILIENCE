@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Energy Resilience AI',
+  title: 'Pravah | Energy Resilience',
   description: 'An AI-powered dashboard for energy supply chain resilience.',
 };
 

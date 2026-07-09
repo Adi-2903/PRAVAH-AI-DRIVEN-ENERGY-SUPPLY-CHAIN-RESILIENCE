@@ -119,11 +119,11 @@ export default function App() {
               boxShadow: '0 4px 16px rgba(37,99,235,0.4)',
               flexShrink: 0,
             }}>
-              E
+              P
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.14em', color: '#f8fafc', lineHeight: 1.1 }}>
-                ENSURE
+                PRAVAH
               </div>
               <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.7)', marginTop: 4 }}>
                 Energy Supply Resilience
@@ -237,7 +237,7 @@ export default function App() {
             justifyContent: 'space-between',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, fontWeight: 600, color: '#94a3b8', letterSpacing: '0.05em' }}>
-              <span style={{ color: '#0f172a', fontWeight: 800, letterSpacing: '0.14em', fontSize: 12 }}>ENSURE</span>
+              <span style={{ color: '#0f172a', fontWeight: 800, letterSpacing: '0.14em', fontSize: 12 }}>PRAVAH</span>
               <span style={{ color: '#cbd5e1' }}>·</span>
               <span style={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>Energy Supply Chain Resilience · India</span>
               <span style={{ color: '#cbd5e1' }}>·</span>
