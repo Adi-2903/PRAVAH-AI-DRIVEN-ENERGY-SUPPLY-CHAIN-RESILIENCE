@@ -11,7 +11,7 @@ import time
 import requests
 import pandas as pd
 from dotenv import load_dotenv
-from shared.clients.db_helper import update_data_source_status
+from shared.clients.db_helper import update_data_source_status, get_supabase_client
 
 # Load .env
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
@@ -121,6 +121,14 @@ def check_entity_sanctions(entity_name: str) -> dict:
         if not sanctioned and entity_name_clean in ["YAZD", "IRAN DAILY", "KANDY", "TEST_SDN_SHIP", "NATIONAL IRANIAN OIL COMPANY"]:
             sanctioned = True
             
+        supabase = get_supabase_client()
+        if supabase and sanctioned:
+            try:
+                # Need to match name precisely or roughly
+                supabase.table("ships").update({"is_sanctioned": True}).eq("name", entity_name_clean).execute()
+            except Exception as dbe:
+                print(f"[OFAC Client] Warning: failed to update ships table: {dbe}")
+
         update_data_source_status("ofac", True, record_count, "Success")
         return {
             "entity": entity_name,
@@ -135,6 +143,14 @@ def check_entity_sanctions(entity_name: str) -> dict:
         
         # Fallback matching logic
         sanctioned = entity_name_clean in ["YAZD", "IRAN DAILY", "KANDY", "TEST_SDN_SHIP", "NATIONAL IRANIAN OIL COMPANY"]
+        
+        supabase = get_supabase_client()
+        if supabase and sanctioned:
+            try:
+                supabase.table("ships").update({"is_sanctioned": True}).eq("name", entity_name_clean).execute()
+            except:
+                pass
+
         return {
             "entity": entity_name,
             "sanctioned": sanctioned,

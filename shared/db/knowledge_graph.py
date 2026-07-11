@@ -8,36 +8,55 @@ import networkx as nx
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
+from shared.clients.db_helper import get_supabase_client
+
 def build_supply_chain_graph():
     """
     Build the Pravah supply chain knowledge graph.
     Nodes: suppliers, corridors, ports, refineries, fuel_types
     Edges: represent flow of oil through the supply chain
-
-    Corridor node IDs are lowercase (hormuz, redsea, cape) to match
-    corridors.name in the database exactly — do not reintroduce
-    uppercase variants anywhere in this file.
     """
     G = nx.DiGraph()
-
+    supabase = get_supabase_client()
+    
     # --- Supplier Nodes ---
-    suppliers = [
-        ("SAU_ARAMCO", {"type": "supplier", "country": "SAU", "grade": "Arab Light", "capacity_mbpd": 10.0}),
-        ("IRQ_SOMO",   {"type": "supplier", "country": "IRQ", "grade": "Basra Light", "capacity_mbpd": 4.5}),
-        ("RUS_ROSNEFT",{"type": "supplier", "country": "RUS", "grade": "Urals",       "capacity_mbpd": 5.0}),
-        ("NGA_NNPC",   {"type": "supplier", "country": "NGA", "grade": "Bonny Light", "capacity_mbpd": 1.5}),
-    ]
-    G.add_nodes_from(suppliers)
+    suppliers_list = []
+    if supabase:
+        try:
+            res = supabase.table("suppliers").select("*").execute()
+            if res.data:
+                for row in res.data:
+                    suppliers_list.append((row["name"], {"type": "supplier", "country_id": row.get("country_id"), "grade": row.get("grade")}))
+        except:
+            pass
+    if not suppliers_list:
+        suppliers_list = [
+            ("SAU_ARAMCO", {"type": "supplier", "country": "SAU", "grade": "Arab Light", "capacity_mbpd": 10.0}),
+            ("IRQ_SOMO",   {"type": "supplier", "country": "IRQ", "grade": "Basra Light", "capacity_mbpd": 4.5}),
+            ("RUS_ROSNEFT",{"type": "supplier", "country": "RUS", "grade": "Urals",       "capacity_mbpd": 5.0}),
+            ("NGA_NNPC",   {"type": "supplier", "country": "NGA", "grade": "Bonny Light", "capacity_mbpd": 1.5}),
+        ]
+    G.add_nodes_from(suppliers_list)
 
-    # --- Corridor Nodes (lowercase — matches corridors.name in the DB) ---
-    corridors = [
-        ("hormuz",  {"type": "corridor", "risk_baseline": 60, "tankers_per_day": 17}),
-        ("redsea",  {"type": "corridor", "risk_baseline": 50, "tankers_per_day": 12}),
-        ("cape",    {"type": "corridor", "risk_baseline": 15, "tankers_per_day": 5}),
-    ]
-    G.add_nodes_from(corridors)
+    # --- Corridor Nodes ---
+    corridors_list = []
+    if supabase:
+        try:
+            res = supabase.table("corridors").select("*").execute()
+            if res.data:
+                for row in res.data:
+                    corridors_list.append((row["name"].lower(), {"type": "corridor", "tankers_per_day": row.get("tankers_per_day_avg")}))
+        except:
+            pass
+    if not corridors_list:
+        corridors_list = [
+            ("hormuz",  {"type": "corridor", "risk_baseline": 60, "tankers_per_day": 17}),
+            ("redsea",  {"type": "corridor", "risk_baseline": 50, "tankers_per_day": 12}),
+            ("cape",    {"type": "corridor", "risk_baseline": 15, "tankers_per_day": 5}),
+        ]
+    G.add_nodes_from(corridors_list)
 
-    # --- Port Nodes ---
+    # --- Port Nodes (Not in DB, use hardcoded) ---
     ports = [
         ("PORT_MUMBAI",    {"type": "port", "capacity_mbpd": 1.2, "lat": 18.93, "lng": 72.84}),
         ("PORT_KANDLA",    {"type": "port", "capacity_mbpd": 0.9, "lat": 23.00, "lng": 70.22}),
@@ -47,14 +66,24 @@ def build_supply_chain_graph():
     G.add_nodes_from(ports)
 
     # --- Refinery Nodes ---
-    refineries = [
-        ("REF_JAMNAGAR",  {"type": "refinery", "capacity_mbpd": 1.24, "operator": "Reliance"}),
-        ("REF_MUMBAI",    {"type": "refinery", "capacity_mbpd": 0.24, "operator": "BPCL"}),
-        ("REF_PARADIP",   {"type": "refinery", "capacity_mbpd": 0.30, "operator": "IOCL"}),
-    ]
-    G.add_nodes_from(refineries)
+    refineries_list = []
+    if supabase:
+        try:
+            res = supabase.table("refineries").select("*").execute()
+            if res.data:
+                for row in res.data:
+                    refineries_list.append((row["name"], {"type": "refinery", "capacity_mbpd": row.get("capacity_mbpd")}))
+        except:
+            pass
+    if not refineries_list:
+        refineries_list = [
+            ("REF_JAMNAGAR",  {"type": "refinery", "capacity_mbpd": 1.24, "operator": "Reliance"}),
+            ("REF_MUMBAI",    {"type": "refinery", "capacity_mbpd": 0.24, "operator": "BPCL"}),
+            ("REF_PARADIP",   {"type": "refinery", "capacity_mbpd": 0.30, "operator": "IOCL"}),
+        ]
+    G.add_nodes_from(refineries_list)
 
-    # --- Fuel Type Nodes ---
+    # --- Fuel Type Nodes (Not in DB) ---
     fuels = [
         ("FUEL_DIESEL",  {"type": "fuel"}),
         ("FUEL_PETROL",  {"type": "fuel"}),

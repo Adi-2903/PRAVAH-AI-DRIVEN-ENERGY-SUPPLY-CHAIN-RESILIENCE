@@ -12,7 +12,7 @@ import zipfile
 import requests
 import pandas as pd
 from dotenv import load_dotenv
-from shared.clients.db_helper import update_data_source_status
+from shared.clients.db_helper import update_data_source_status, get_supabase_client
 
 # Load .env
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
@@ -84,6 +84,30 @@ def fetch_latest_events() -> dict:
             else:
                 result[col_name] = None
 
+        supabase = get_supabase_client()
+        if supabase:
+            sqldate = str(result.get('sqldate', '20260711'))
+            if len(sqldate) == 8:
+                event_date = f"{sqldate[:4]}-{sqldate[4:6]}-{sqldate[6:8]}T00:00:00Z"
+            else:
+                event_date = "2026-07-11T00:00:00Z"
+                
+            headline = f"{result.get('actor1name', 'Unknown')} vs {result.get('actor2name', 'Unknown')} ({result.get('actiongeo_fullname', '')})"
+            gs = result.get('goldsteinscale', 0.0)
+            
+            data = {
+                "source": "gdelt",
+                "headline": headline,
+                "event_date": event_date,
+                "goldstein_scale": gs,
+                "severity": "critical" if gs < -7 else "high" if gs < -3 else "medium",
+                "raw_payload": result
+            }
+            try:
+                supabase.table("risk_events").insert(data).execute()
+            except Exception as dbe:
+                print(f"[GDELT Client] Warning: failed to insert into risk_events: {dbe}")
+
         update_data_source_status("gdelt", True, 1, "Success")
         return result
 
@@ -92,6 +116,17 @@ def fetch_latest_events() -> dict:
         print(f"[GDELT Client] Error: {msg}")
         update_data_source_status("gdelt", False, 0, msg)
         
+        # Fallback to DB
+        supabase = get_supabase_client()
+        if supabase:
+            try:
+                res = supabase.table("risk_events").select("raw_payload").eq("source", "gdelt").order("event_date", desc=True).limit(1).execute()
+                if res.data and res.data[0].get("raw_payload"):
+                    print("[GDELT Client] Using database fallback.")
+                    return res.data[0]["raw_payload"]
+            except Exception as dbe:
+                print(f"[GDELT Client] DB fallback error: {dbe}")
+                
         # Return fallback mock event
         return {
             "globaleventid": "123456789",

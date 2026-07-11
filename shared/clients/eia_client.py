@@ -2,7 +2,7 @@
 import os
 import requests
 from dotenv import load_dotenv
-from shared.clients.db_helper import update_data_source_status
+from shared.clients.db_helper import update_data_source_status, get_supabase_client
 
 # Load .env from the project root (two levels up from shared/clients/)
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
@@ -20,13 +20,7 @@ def fetch_latest_brent_price() -> dict:
         msg = "EIA_API_KEY is not configured in the environment variables."
         print(f"[EIA Client] Warning: {msg}")
         update_data_source_status("eia_api", False, 0, msg)
-        return {
-            "date": "2026-07-10",
-            "price": 82.50,
-            "unit": "$/barrel",
-            "product": "Brent",
-            "note": "fallback mock price"
-        }
+        return _eia_fallback(msg)
 
     params = {
         "api_key": EIA_API_KEY,
@@ -63,19 +57,49 @@ def fetch_latest_brent_price() -> dict:
             "unit": record.get("units", "$/barrel"),
             "product": record.get("product-name", "Brent"),
         }
+        
+        supabase = get_supabase_client()
+        if supabase:
+            event_date = f"{result['date']}T00:00:00Z" if result.get('date') else "2026-07-11T00:00:00Z"
+            data = {
+                "source": "eia_api",
+                "headline": f"Brent Crude Price: {result.get('price')} {result.get('unit')}",
+                "event_date": event_date,
+                "goldstein_scale": 0.0,
+                "severity": "low",
+                "raw_payload": result
+            }
+            try:
+                supabase.table("risk_events").insert(data).execute()
+            except Exception as dbe:
+                print(f"[EIA Client] Warning: failed to insert into risk_events: {dbe}")
+
         update_data_source_status("eia_api", True, 1, "Success")
         return result
     except Exception as e:
         msg = f"Failed to fetch from EIA: {e}"
         print(f"[EIA Client] Error: {msg}")
         update_data_source_status("eia_api", False, 0, msg)
-        return {
-            "date": "2026-07-10",
-            "price": 82.50,
-            "unit": "$/barrel",
-            "product": "Brent",
-            "note": f"fallback mock price (error: {e})"
-        }
+        return _eia_fallback(msg)
+
+def _eia_fallback(error_msg: str) -> dict:
+    supabase = get_supabase_client()
+    if supabase:
+        try:
+            res = supabase.table("risk_events").select("raw_payload").eq("source", "eia_api").order("event_date", desc=True).limit(1).execute()
+            if res.data and res.data[0].get("raw_payload"):
+                print("[EIA Client] Using database fallback.")
+                return res.data[0]["raw_payload"]
+        except Exception as dbe:
+            print(f"[EIA Client] DB fallback error: {dbe}")
+            
+    return {
+        "date": "2026-07-10",
+        "price": 82.50,
+        "unit": "$/barrel",
+        "product": "Brent",
+        "note": f"fallback mock price (error: {error_msg})"
+    }
 
 if __name__ == "__main__":
     try:

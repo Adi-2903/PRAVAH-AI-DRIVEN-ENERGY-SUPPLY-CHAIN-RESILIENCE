@@ -11,7 +11,7 @@ import json
 import asyncio
 import websockets
 from dotenv import load_dotenv
-from shared.clients.db_helper import update_data_source_status
+from shared.clients.db_helper import update_data_source_status, get_supabase_client
 
 # Load .env from the project root (two levels up from shared/clients/)
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
@@ -81,31 +81,61 @@ def get_sample_ship_position(bounding_boxes=None) -> dict:
         msg = "AISSTREAM_API_KEY is not configured in the environment variables."
         print(f"[AIS Client] Warning: {msg}")
         update_data_source_status("aisstream", False, 0, msg)
-        return {
-            "mmsi": "477995600",
-            "name": "MOCK TANKER (ST. OF HORMUZ)",
-            "lat": 26.5000,
-            "lng": 56.1000,
-            "timestamp": "2026-07-11T12:00:00Z",
-            "note": "fallback mock position"
-        }
+        return _ais_fallback(msg)
 
     try:
         result = asyncio.run(_listen_for_position(bounding_boxes))
+        
+        supabase = get_supabase_client()
+        if supabase and result.get("mmsi"):
+            data = {
+                "mmsi": result["mmsi"],
+                "name": result.get("name"),
+                "last_lat": result.get("lat"),
+                "last_lng": result.get("lng"),
+                "last_seen": result.get("timestamp") or "2026-07-11T00:00:00Z"
+            }
+            try:
+                # Upsert into ships table using mmsi
+                supabase.table("ships").upsert(data, on_conflict="mmsi").execute()
+            except Exception as dbe:
+                print(f"[AIS Client] Warning: failed to upsert into ships: {dbe}")
+
         update_data_source_status("aisstream", True, 1, "Success")
         return result
     except Exception as e:
         msg = f"Failed to fetch AIS data: {e}"
         print(f"[AIS Client] Error: {msg}")
         update_data_source_status("aisstream", False, 0, msg)
-        return {
-            "mmsi": "477995600",
-            "name": "MOCK TANKER (ST. OF HORMUZ)",
-            "lat": 26.5000,
-            "lng": 56.1000,
-            "timestamp": "2026-07-11T12:00:00Z",
-            "note": f"fallback mock position (error: {e})"
-        }
+        return _ais_fallback(msg)
+
+def _ais_fallback(error_msg: str) -> dict:
+    supabase = get_supabase_client()
+    if supabase:
+        try:
+            res = supabase.table("ships").select("*").order("last_seen", desc=True).limit(1).execute()
+            if res.data:
+                print("[AIS Client] Using database fallback.")
+                ship = res.data[0]
+                return {
+                    "mmsi": ship.get("mmsi"),
+                    "name": ship.get("name"),
+                    "lat": ship.get("last_lat"),
+                    "lng": ship.get("last_lng"),
+                    "timestamp": ship.get("last_seen"),
+                    "note": f"DB fallback (error: {error_msg})"
+                }
+        except Exception as dbe:
+            print(f"[AIS Client] DB fallback error: {dbe}")
+            
+    return {
+        "mmsi": "477995600",
+        "name": "MOCK TANKER (ST. OF HORMUZ)",
+        "lat": 26.5000,
+        "lng": 56.1000,
+        "timestamp": "2026-07-11T12:00:00Z",
+        "note": f"fallback mock position (error: {error_msg})"
+    }
 
 if __name__ == "__main__":
     try:
