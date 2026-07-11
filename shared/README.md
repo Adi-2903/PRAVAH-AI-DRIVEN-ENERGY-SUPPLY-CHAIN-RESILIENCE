@@ -76,10 +76,21 @@ Agents import these directly (`from shared.schemas.simulate import SimulateRespo
 instead of retyping the spec. **Once frozen, do not change any field, type, or range
 without team agreement** — a change here silently breaks every agent at once.
 
-## Verification status (this machine)
+## Verification status
 
-- ✅ All `shared/**/*.py` byte-compile with no syntax errors.
-- ✅ `python shared/db/knowledge_graph.py` → `18 nodes, 29 edges`, `24` paths through Hormuz.
-- ⏳ Pydantic schema imports, the FastAPI shell, and `seed.py` need `pip install`
-  and (for the last two) live Supabase credentials — run them once your Python
-  environment has the deps installed.
+Live Supabase project **`pravah`** (`runewqeuvmcqqvfnqhzj`, region ap-south-1) is provisioned:
+
+- ✅ All 12 tables created (via `schema.sql`), plus both indexes, `pgcrypto`, and the
+  `user_views` RLS policies. RLS is **on** only for `user_views`; the public tables are
+  readable by the anon key (Citizen view).
+- ✅ Seed data loaded: 6 countries, 4 corridors (`cape, domestic, hormuz, redsea`),
+  4 data_sources.
+- ✅ Anon-key REST read of `corridors` returns 200.
+- ✅ Supabase Auth signup + password login both return 200 (login yields an
+  `access_token`). `mailer_autoconfirm` is enabled so new users can log in
+  immediately — re-enable email confirmation before production.
+- ✅ All `shared/**/*.py` byte-compile; `python shared/db/knowledge_graph.py` →
+  `18 nodes, 29 edges`, `24` paths through Hormuz.
+- ⏳ Importing `shared/schemas/*` and running `uvicorn shared.main:app` locally still
+  need `pip install -r shared/requirements.txt`. On this machine the system Python's
+  `ctypes`/`pip` are broken, so install deps in a fresh Python before running those two.
