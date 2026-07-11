@@ -1,7 +1,14 @@
 # shared/db/seed.py
 import os
+import sys
 from supabase import create_client
 from dotenv import load_dotenv
+
+# Windows consoles default to cp1252, which can't encode the ✅ in the final
+# print below. Reconfigure stdout to UTF-8 so this script finishes cleanly on
+# Windows as well as macOS/Linux.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 load_dotenv()
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
