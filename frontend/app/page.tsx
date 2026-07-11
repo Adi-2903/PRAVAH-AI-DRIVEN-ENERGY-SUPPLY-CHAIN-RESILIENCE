@@ -17,6 +17,7 @@ import {
 import Dashboard from './dashboard';
 import ScenarioSimulator from './simulator';
 import SPROptimizer from './spr';
+import ProcurementModule from './procurement';
 
 const TABS = [
   { id: 'dashboard',    label: 'Command Center',     icon: LayoutDashboard },
@@ -325,7 +326,7 @@ export default function App() {
           {activeTab === 'simulator'   && <ScenarioSimulator />}
           {activeTab === 'spr'         && <SPROptimizer />}
           {activeTab === 'risk'        && <ComingSoon label="Risk Intelligence Center" />}
-          {activeTab === 'procurement' && <ComingSoon label="Procurement Module" />}
+          {activeTab === 'procurement' && <ProcurementModule />}
         </main>
       </div>
     </div>
