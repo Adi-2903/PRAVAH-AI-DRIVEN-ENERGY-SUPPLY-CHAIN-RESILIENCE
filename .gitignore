@@ -12,3 +12,7 @@ __pycache__/
 venv/
 *.zip
 *.csv
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
