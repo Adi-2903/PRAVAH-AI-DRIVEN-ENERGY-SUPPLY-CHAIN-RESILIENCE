@@ -5,8 +5,10 @@ coverage/
 *.log
 .env*
 !.env.example
+# Python
 __pycache__/
 *.pyc
 .venv/
+venv/
 *.zip
 *.csv
