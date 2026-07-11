@@ -6,7 +6,13 @@ from supabase import create_client
 from dotenv import load_dotenv
 
 load_dotenv()
-supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+supabase_url = os.environ.get("SUPABASE_URL")
+supabase_key = os.environ.get("SUPABASE_ANON_KEY")
+if supabase_url and supabase_key:
+    supabase = create_client(supabase_url, supabase_key)
+else:
+    supabase = None
+
 
 app = FastAPI(title="Pravah Shared Backend")
 
@@ -28,6 +34,8 @@ class LoginRequest(BaseModel):
 
 @app.post("/auth/signup")
 def signup(payload: SignupRequest):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase is not configured on this instance.")
     try:
         result = supabase.auth.sign_up({"email": payload.email, "password": payload.password})
         return {"user_id": result.user.id, "email": result.user.email}
@@ -37,6 +45,8 @@ def signup(payload: SignupRequest):
 
 @app.post("/auth/login")
 def login(payload: LoginRequest):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase is not configured on this instance.")
     try:
         result = supabase.auth.sign_in_with_password(
             {"email": payload.email, "password": payload.password}

@@ -84,7 +84,7 @@ def simulate_mock():
         ),
         calibration_note="elasticities validated against EIA historical shock: 2022 Ukraine invasion price spike",
         num_simulations_run=5000,
-        computed_at=datetime.now(timezone.utc).isoformat(),
+        computed_at=datetime.now(timezone.utc),
         data_source="fallback_cache",
         volatility_calibrated_from="2024-07-09 to 2026-07-09"
     )
@@ -174,7 +174,7 @@ def simulate(req: SimulateRequest):
         gdp_impact_pct=gdp_impact,
         calibration_note="elasticities validated against EIA historical shock: 2022 Ukraine invasion price spike",
         num_simulations_run=N,
-        computed_at=datetime.now(timezone.utc).isoformat(),
+        computed_at=datetime.now(timezone.utc),
         data_source=DATA_SOURCE,
         volatility_calibrated_from=CALIBRATION_RANGE
     )

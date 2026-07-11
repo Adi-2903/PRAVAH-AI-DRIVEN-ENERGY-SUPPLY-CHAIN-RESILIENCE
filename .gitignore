@@ -6,8 +6,11 @@ coverage/
 .env*
 !.env.example
 
-# Python
 __pycache__/
 *.pyc
 .venv/
 venv/
+*.zip
+*.csv
+*cache.json
+eia_cache.json
