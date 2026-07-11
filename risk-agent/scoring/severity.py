@@ -27,6 +27,9 @@ _HIGH = re.compile(
 )
 
 
+_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
+
 def severity_from_goldstein(goldstein: Optional[float]) -> Optional[str]:
     if goldstein is None:
         return None
@@ -40,12 +43,18 @@ def severity_from_goldstein(goldstein: Optional[float]) -> Optional[str]:
 
 
 def classify_severity(event: dict) -> str:
+    """Severity is the STRONGEST signal among: a critical keyword, a high
+    keyword, and the Goldstein band. Taking the max (rather than letting one
+    source preempt the others) stops a mildly-cooperative Goldstein value from
+    silently downgrading an explicit 'sanctions'/'embargo' headline to low.
+    """
     headline = event.get("headline") or ""
+    candidates = ["low"]  # floor
     if _CRITICAL.search(headline):
-        return "critical"
+        candidates.append("critical")
+    if _HIGH.search(headline):
+        candidates.append("high")
     g = severity_from_goldstein(event.get("goldstein_scale"))
     if g:
-        return g
-    if _HIGH.search(headline):
-        return "high"
-    return "low"
+        candidates.append(g)
+    return max(candidates, key=_RANK.__getitem__)

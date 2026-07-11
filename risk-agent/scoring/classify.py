@@ -12,8 +12,11 @@ import re
 # doesn't fire on 'important'/'report'. `\w*` covers inflections.
 _RELEVANT = re.compile(
     r"\b(oil|crude\w*|tanker\w*|refiner\w*|strait\w*|shipping|ship|sanction\w*|"
-    r"port|vessel\w*|opec|pipeline\w*|embargo\w*|naval|maritime|export\w*|"
-    r"barrel\w*|brent|petroleum|chokepoint\w*)\b",
+    r"ports?|vessel\w*|opec|pipeline\w*|embargo\w*|naval|maritime|export\w*|"
+    r"barrel\w*|brent|petroleum|chokepoint\w*|"
+    # geopolitical-escalation terms: for corridor-scoped GDELT results these are
+    # genuine risk signals even when the headline never says 'oil'/'tanker'.
+    r"blockade\w*|escalat\w*|tension\w*|conflict\w*|closure\w*|hijack\w*|seiz\w*)\b",
     re.IGNORECASE,
 )
 

@@ -5,8 +5,10 @@ classified, severity-labelled and corridor-assigned) and an ``as_of`` time, it
 produces the numbers that fill the frozen ``RiskScoreResponse`` — plus a
 human-readable ``reasoning_trail`` explaining every adjustment.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
+
+VALID_SEVERITIES = ("low", "medium", "high", "critical")
 
 # Corridor baseline risk (0-100). Mirrors risk_baseline in the knowledge graph;
 # 'domestic' is added here (not a chokepoint) with a low baseline.
@@ -44,9 +46,26 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
+def _aware(dt):
+    """Coerce a naive datetime to UTC so aware/naive subtraction never raises.
+    Defends the scoring math against any future event source that emits naive
+    timestamps (fixtures and GDELT both emit aware ones today)."""
+    if isinstance(dt, datetime) and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _norm_severity(sev) -> str:
+    """Keep severity inside the frozen contract's enum; anything unexpected
+    (a future source bypassing node_severity) degrades to 'low' rather than
+    crashing KeyEvent validation with a 500."""
+    return sev if sev in VALID_SEVERITIES else "low"
+
+
 def compute_risk(corridor: str, events: List[dict], as_of: datetime,
                  data_sources: Optional[List[str]] = None) -> dict:
     data_sources = data_sources or []
+    as_of = _aware(as_of)
     trail: List[str] = []
 
     base = CORRIDOR_BASELINE.get(corridor, 20.0)
@@ -56,10 +75,10 @@ def compute_risk(corridor: str, events: List[dict], as_of: datetime,
     pressure = 0.0
     counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
     for e in events:
-        sev = e.get("severity", "low")
+        sev = _norm_severity(e.get("severity", "low"))
         counts[sev] = counts.get(sev, 0) + 1
         date = e.get("event_date")
-        rf = recency_factor(date, as_of) if isinstance(date, datetime) else 1.0
+        rf = recency_factor(_aware(date), as_of) if isinstance(date, datetime) else 1.0
         pressure += SEVERITY_POINTS.get(sev, 2.0) * rf
     pressure = min(pressure, MAX_EVENT_PRESSURE)
 
@@ -91,12 +110,14 @@ def compute_risk(corridor: str, events: List[dict], as_of: datetime,
     # --- key events: most severe first, then most recent, top 5 ---
     def _key(e):
         d = e.get("event_date")
-        ts = d.timestamp() if isinstance(d, datetime) else 0.0
-        return (SEVERITY_RANK.get(e.get("severity", "low"), 0), ts)
+        ts = _aware(d).timestamp() if isinstance(d, datetime) else 0.0
+        return (SEVERITY_RANK.get(_norm_severity(e.get("severity", "low")), 0), ts)
 
     top = sorted(events, key=_key, reverse=True)[:5]
     key_events = [
-        {"headline": e.get("headline", ""), "severity": e.get("severity", "low"), "date": e.get("event_date")}
+        {"headline": e.get("headline", ""),
+         "severity": _norm_severity(e.get("severity", "low")),
+         "date": _aware(e.get("event_date"))}
         for e in top
     ]
 

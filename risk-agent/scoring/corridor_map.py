@@ -20,11 +20,15 @@ COUNTRY_CORRIDOR = {
 }
 
 # Headline keyword hints -> corridor (word-boundary matched, first corridor with
-# any hit wins). Order matters: hormuz is checked before redsea, etc.
+# any hit wins). Order matters: the most *specific* phrases are checked first.
+# cape is checked before redsea on purpose: a very common real phrasing is
+# "reroute to the Cape of Good Hope to avoid Suez" — that headline mentions both
+# 'suez' (a redsea keyword) and the Cape, but it's a cape-route event, so cape
+# must win.
 KEYWORD_CORRIDOR = [
     (r"\b(strait of hormuz|hormuz|persian gulf|arabian gulf|musandam)\b", "hormuz"),
-    (r"\b(red sea|bab-el-mandeb|bab el mandeb|houthi|suez|gulf of aden|aden)\b", "redsea"),
     (r"\b(cape of good hope|cape route|good hope)\b", "cape"),
+    (r"\b(red sea|bab-el-mandeb|bab el mandeb|houthi|suez|gulf of aden|aden)\b", "redsea"),
     (r"\b(domestic pipeline|india refinery|indian refinery)\b", "domestic"),
 ]
 _KEYWORD_CORRIDOR = [(re.compile(pat, re.IGNORECASE), corridor) for pat, corridor in KEYWORD_CORRIDOR]

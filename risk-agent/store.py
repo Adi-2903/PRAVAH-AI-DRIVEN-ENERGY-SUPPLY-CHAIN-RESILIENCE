@@ -24,11 +24,15 @@ def _iso(dt):
 
 
 def store_risk(corridor: str, result: dict, as_of: datetime) -> dict:
-    sb = _client()
-    if sb is None:
-        return {"stored": False, "reason": "no Supabase credentials"}
-
+    # Everything — including client construction — is inside the try, because a
+    # malformed SUPABASE_URL or a missing `supabase` package makes create_client
+    # raise. Persistence is a best-effort side effect and must never turn a
+    # successfully-scored request into an HTTP 500.
     try:
+        sb = _client()
+        if sb is None:
+            return {"stored": False, "reason": "no Supabase credentials"}
+
         found = sb.table("corridors").select("id").eq("name", corridor).limit(1).execute()
         corridor_id: Optional[int] = found.data[0]["id"] if found.data else None
 

@@ -83,8 +83,11 @@ def node_score(state: RiskState) -> dict:
 def node_store(state: RiskState) -> dict:
     if not state.get("persist", True):
         return {"store_info": {"stored": False, "reason": "persist disabled"}}
-    from store import store_risk
-    info = store_risk(state["corridor"], state["result"], state["as_of"])
+    try:
+        from store import store_risk
+        info = store_risk(state["corridor"], state["result"], state["as_of"])
+    except Exception as e:  # persistence must never break a scored response
+        info = {"stored": False, "reason": f"{type(e).__name__}: {e}"}
     return {"store_info": info}
 
 

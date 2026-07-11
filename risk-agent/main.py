@@ -29,7 +29,7 @@ app = FastAPI(title="Pravah Risk Agent")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # wildcard origins + credentials is rejected by browsers
     allow_methods=["*"],
     allow_headers=["*"],
 )
