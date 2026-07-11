@@ -5,16 +5,15 @@ coverage/
 *.log
 .env*
 !.env.example
+
 # Python
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
 .venv/
 venv/
 *.zip
 *.csv
 *cache.json
 eia_cache.json
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
