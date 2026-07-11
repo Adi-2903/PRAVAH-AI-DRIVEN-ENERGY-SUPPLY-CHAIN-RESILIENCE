@@ -1,4 +1,11 @@
 # shared/clients/ais_client.py
+"""
+AIS Client — Connects to live aisstream.io WebSocket feed for ship tracking.
+
+Endpoint: wss://stream.aisstream.io/v0/stream
+Auth: API key sent in the subscription JSON message
+"""
+
 import os
 import json
 import asyncio
@@ -6,17 +13,71 @@ import websockets
 from dotenv import load_dotenv
 from shared.clients.db_helper import update_data_source_status
 
-load_dotenv()
+# Load .env from the project root (two levels up from shared/clients/)
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
-async def get_sample_ship_position() -> dict:
+AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY")
+WEBSOCKET_URL = "wss://stream.aisstream.io/v0/stream"
+
+# Default bounding box: Strait of Hormuz
+# [[south-west corner], [north-east corner]]
+DEFAULT_BOUNDING_BOX = [[[24.0, 55.5], [27.5, 57.5]]]
+
+RECEIVE_TIMEOUT = 15  # seconds to wait for a position report
+
+async def _listen_for_position(bounding_boxes=None) -> dict:
+    if not AISSTREAM_API_KEY or AISSTREAM_API_KEY == "your_key_here":
+        raise ValueError(
+            "AISSTREAM_API_KEY is not set. "
+            "Register at https://aisstream.io/ and add your key to the .env file."
+        )
+
+    if bounding_boxes is None:
+        bounding_boxes = DEFAULT_BOUNDING_BOX
+
+    # Build subscription message — must be sent within 3 seconds of connecting
+    subscribe_msg = json.dumps({
+        "APIKey": AISSTREAM_API_KEY,
+        "BoundingBoxes": bounding_boxes,
+        "FiltersShipMMSI": [],
+        "FilterMessageTypes": ["PositionReport"],
+    })
+
+    async with websockets.connect(WEBSOCKET_URL) as ws:
+        # Send subscription IMMEDIATELY after connecting (within 3-second window)
+        await ws.send(subscribe_msg)
+
+        # Wait for exactly one PositionReport with a timeout
+        raw = await asyncio.wait_for(ws.recv(), timeout=RECEIVE_TIMEOUT)
+        message = json.loads(raw)
+
+        # Check if the server returned an error message
+        if "error" in message or "Error" in message:
+            error_msg = message.get("error") or message.get("Error")
+            raise ValueError(f"aisstream returned error: {error_msg}")
+
+        # Parse the PositionReport
+        msg_type = message.get("MessageType", "")
+        meta = message.get("MetaData", {})
+        position = message.get("Message", {}).get("PositionReport", {})
+
+        return {
+            "mmsi": str(meta.get("MMSI")) if meta.get("MMSI") else None,
+            "name": meta.get("ShipName", "").strip() or "Unknown Ship",
+            "lat": float(position.get("Latitude")) if position.get("Latitude") is not None else None,
+            "lng": float(position.get("Longitude")) if position.get("Longitude") is not None else None,
+            "timestamp": meta.get("time_utc"),
+            "speed": position.get("Sog"),
+            "course": position.get("Cog"),
+        }
+
+def get_sample_ship_position(bounding_boxes=None) -> dict:
     """
-    Connects to wss://stream.aisstream.io/v0/stream,
-    subscribes to Strait of Hormuz bounding box,
-    fetches one PositionReport, closes connection,
-    and updates 'aisstream' data source status in Supabase.
+    Connects to aisstream.io and fetches one live ship position report.
+    If successful, updates the 'aisstream' data source status in Supabase.
+    If unsuccessful or API key is missing, returns fallback mock data.
     """
-    api_key = os.getenv("AISSTREAM_API_KEY", "").strip()
-    if not api_key:
+    if not AISSTREAM_API_KEY or AISSTREAM_API_KEY == "your_key_here":
         msg = "AISSTREAM_API_KEY is not configured in the environment variables."
         print(f"[AIS Client] Warning: {msg}")
         update_data_source_status("aisstream", False, 0, msg)
@@ -29,65 +90,12 @@ async def get_sample_ship_position() -> dict:
             "note": "fallback mock position"
         }
 
-    url = "wss://stream.aisstream.io/v0/stream"
-    subscribe_msg = {
-        "APIKey": api_key,
-        "BoundingBoxes": [[[24.0, 55.5], [27.5, 57.5]]]  # Strait of Hormuz
-    }
-
     try:
-        async with websockets.connect(url) as websocket:
-            # 1. Send subscription message immediately (within 3 seconds)
-            await websocket.send(json.dumps(subscribe_msg))
-            print("[AIS Client] Sent subscription request for Strait of Hormuz bounding box.")
-
-            # 2. Wait for one PositionReport message with a 15-second timeout
-            async def receive_report():
-                async for message in websocket:
-                    data = json.loads(message)
-                    if data.get("MessageType") == "PositionReport":
-                        return data
-                return None
-
-            try:
-                report = await asyncio.wait_for(receive_report(), timeout=15.0)
-                if report:
-                    metadata = report.get("MetaData", {})
-                    pos_report = report.get("Message", {}).get("PositionReport", {})
-                    
-                    mmsi = metadata.get("MMSI") or pos_report.get("UserID")
-                    ship_name = metadata.get("ShipName", "").strip()
-                    lat = metadata.get("latitude") or pos_report.get("Latitude")
-                    lng = metadata.get("longitude") or pos_report.get("Longitude")
-                    time_utc = metadata.get("time_utc")
-                    
-                    result = {
-                        "mmsi": str(mmsi) if mmsi else None,
-                        "name": ship_name or "Unknown Ship",
-                        "lat": float(lat) if lat is not None else None,
-                        "lng": float(lng) if lng is not None else None,
-                        "timestamp": time_utc
-                    }
-                    
-                    # Update database status
-                    update_data_source_status("aisstream", True, 1, "Success")
-                    return result
-                else:
-                    raise ValueError("Connection closed without receiving any PositionReport.")
-            except asyncio.TimeoutError:
-                msg = "Timeout waiting for ship position in Strait of Hormuz box."
-                print(f"[AIS Client] Warning: {msg}")
-                update_data_source_status("aisstream", False, 0, msg)
-                return {
-                    "mmsi": "477995600",
-                    "name": "MOCK TANKER (ST. OF HORMUZ)",
-                    "lat": 26.5000,
-                    "lng": 56.1000,
-                    "timestamp": "2026-07-11T12:00:00Z",
-                    "note": f"fallback mock position (timeout)"
-                }
+        result = asyncio.run(_listen_for_position(bounding_boxes))
+        update_data_source_status("aisstream", True, 1, "Success")
+        return result
     except Exception as e:
-        msg = f"Websocket connection error: {e}"
+        msg = f"Failed to fetch AIS data: {e}"
         print(f"[AIS Client] Error: {msg}")
         update_data_source_status("aisstream", False, 0, msg)
         return {
@@ -98,3 +106,10 @@ async def get_sample_ship_position() -> dict:
             "timestamp": "2026-07-11T12:00:00Z",
             "note": f"fallback mock position (error: {e})"
         }
+
+if __name__ == "__main__":
+    try:
+        result = get_sample_ship_position()
+        print(f"[PASS] AIS Ship Position: {result}")
+    except Exception as e:
+        print(f"[FAIL] AIS Error: {e}")

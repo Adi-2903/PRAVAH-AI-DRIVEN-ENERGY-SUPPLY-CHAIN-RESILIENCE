@@ -1,126 +1,97 @@
 # shared/clients/gdelt_client.py
+"""
+GDELT Client — Fetches the latest 15-minute geopolitical event export.
+
+Endpoint: http://data.gdeltproject.org/gdeltv2/lastupdate.txt
+Auth: None (open data)
+"""
+
+import io
 import os
-import csv
 import zipfile
 import requests
+import pandas as pd
 from dotenv import load_dotenv
 from shared.clients.db_helper import update_data_source_status
 
-load_dotenv()
+# Load .env
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+
+LASTUPDATE_URL = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
+
+GDELT_COLUMNS = {
+    0: "globaleventid",
+    1: "sqldate",
+    6: "actor1name",
+    16: "actor2name",
+    26: "eventcode",
+    30: "goldsteinscale",
+    52: "actiongeo_fullname",
+    53: "actiongeo_countrycode",
+    60: "sourceurl",
+}
 
 def fetch_latest_events() -> dict:
     """
-    Downloads the latest GDELT 2.0 15-minute events export,
-    parses the first event, cleans up temporary files,
-    and updates the 'gdelt' data source status in Supabase.
+    Download the most recent GDELT 2.0 event export and parse the first record.
+    If successful, updates the 'gdelt' data source status in Supabase.
+    If unsuccessful, returns fallback mock event data.
     """
-    last_update_url = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
-    temp_zip = "latest_gdelt_export.zip"
-    temp_dir = "latest_gdelt_extracted"
-    
     try:
-        # 1. Fetch lastupdate.txt to find the latest export URL
-        response = requests.get(last_update_url, timeout=10)
-        if response.status_code != 200:
-            raise requests.RequestException(f"Failed to fetch lastupdate.txt: status {response.status_code}")
-            
+        # Step 1: Get the lastupdate.txt and parse the FIRST line (events export)
+        response = requests.get(LASTUPDATE_URL, timeout=15)
+        response.raise_for_status()
+
         lines = response.text.strip().split("\n")
         if not lines:
-            raise ValueError("Empty response from GDELT lastupdate.txt")
-            
-        # First line is the export CSV zip
-        export_line = lines[0]
-        parts = export_line.split(" ")
+            raise ValueError("GDELT lastupdate.txt returned empty response.")
+
+        parts = lines[0].strip().split(" ")
         if len(parts) < 3:
-            raise ValueError(f"Unexpected format in lastupdate.txt line: {export_line}")
-            
-        zip_url = parts[2].strip()
+            raise ValueError(f"Unexpected lastupdate.txt format: {lines[0]}")
+
+        zip_url = parts[2]
+
         print(f"[GDELT Client] Downloading latest export zip: {zip_url}")
-        
-        # 2. Download the zip file
+
+        # Step 2: Download the zip file into memory
         zip_response = requests.get(zip_url, timeout=30)
-        if zip_response.status_code != 200:
-            raise requests.RequestException(f"Failed to download GDELT zip: status {zip_response.status_code}")
-            
-        with open(temp_zip, "wb") as f:
-            f.write(zip_response.content)
-            
-        # 3. Extract the ZIP
-        os.makedirs(temp_dir, exist_ok=True)
-        extracted_files = []
-        with zipfile.ZipFile(temp_zip, "r") as zip_ref:
-            zip_ref.extractall(temp_dir)
-            extracted_files = zip_ref.namelist()
-            
-        if not extracted_files:
-            raise FileNotFoundError("No files extracted from GDELT zip")
-            
-        csv_filename = os.path.join(temp_dir, extracted_files[0])
-        
-        # 4. Parse the first row of the tab-delimited CSV
-        first_event = None
-        with open(csv_filename, "r", encoding="utf-8", errors="ignore") as f:
-            # GDELT 2.0 event CSV is tab-delimited
-            reader = csv.reader(f, delimiter="\t")
-            for row in reader:
-                if len(row) >= 61:
-                    first_event = row
-                    break
-                    
-        # 5. Clean up downloaded/extracted files immediately
-        try:
-            if os.path.exists(temp_zip):
-                os.remove(temp_zip)
-            if os.path.exists(csv_filename):
-                os.remove(csv_filename)
-            if os.path.exists(temp_dir):
-                os.rmdir(temp_dir)
-        except Exception as cleanup_err:
-            print(f"[GDELT Client] Cleanup warning: {cleanup_err}")
-            
-        if not first_event:
-            raise ValueError("No valid event records found in GDELT CSV export")
-            
-        # Extract specific columns:
-        # 0: GLOBALEVENTID, 1: SQLDATE, 6: Actor1Name, 16: Actor2Name, 26: EventCode
-        # 30: GoldsteinScale, 52: ActionGeo_FullName, 53: ActionGeo_CountryCode, 60: SOURCEURL
-        try:
-            goldstein = float(first_event[30]) if first_event[30] else 0.0
-        except ValueError:
-            goldstein = 0.0
-            
-        result = {
-            "globaleventid": first_event[0],
-            "sqldate": first_event[1],
-            "actor1name": first_event[6],
-            "actor2name": first_event[16],
-            "eventcode": first_event[26],
-            "goldsteinscale": goldstein,
-            "actiongeo_fullname": first_event[52],
-            "actiongeo_countrycode": first_event[53],
-            "sourceurl": first_event[60]
-        }
-        
-        # Update data source status
+        zip_response.raise_for_status()
+
+        # Step 3: Extract and parse the CSV from the zip using pandas
+        with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zf:
+            csv_filename = zf.namelist()[0]
+            with zf.open(csv_filename) as csv_file:
+                df = pd.read_csv(csv_file, sep="\t", header=None, dtype=str)
+
+        if df.empty:
+            raise ValueError("GDELT event export CSV is empty.")
+
+        # Step 4: Extract the first row using our column mapping
+        first_row = df.iloc[0]
+        result = {}
+        for col_idx, col_name in GDELT_COLUMNS.items():
+            if col_idx < len(first_row):
+                value = first_row.iloc[col_idx]
+                if col_name == "goldsteinscale":
+                    try:
+                        value = float(value) if pd.notna(value) and value != "" else 0.0
+                    except (ValueError, TypeError):
+                        value = 0.0
+                else:
+                    value = str(value) if pd.notna(value) and value != "" else None
+                result[col_name] = value
+            else:
+                result[col_name] = None
+
         update_data_source_status("gdelt", True, 1, "Success")
         return result
-        
+
     except Exception as e:
         msg = f"Failed to fetch from GDELT: {e}"
         print(f"[GDELT Client] Error: {msg}")
         update_data_source_status("gdelt", False, 0, msg)
         
-        # Cleanup if files still exist
-        try:
-            if os.path.exists(temp_zip):
-                os.remove(temp_zip)
-            if os.path.exists(temp_dir):
-                for f in os.listdir(temp_dir):
-                    os.remove(os.path.join(temp_dir, f))
-                os.rmdir(temp_dir)
-        except:
-            pass
-            
         # Return fallback mock event
         return {
             "globaleventid": "123456789",
@@ -134,3 +105,10 @@ def fetch_latest_events() -> dict:
             "sourceurl": "https://www.reuters.com/mock-geopolitical-event",
             "note": f"fallback mock event (error: {e})"
         }
+
+if __name__ == "__main__":
+    try:
+        result = fetch_latest_events()
+        print(f"[PASS] GDELT Event: {result}")
+    except Exception as e:
+        print(f"[FAIL] GDELT Error: {e}")

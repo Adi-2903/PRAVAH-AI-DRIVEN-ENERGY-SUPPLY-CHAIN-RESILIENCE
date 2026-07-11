@@ -1,59 +1,82 @@
 # shared/clients/test_spine.py
-import asyncio
+"""
+test_spine.py — Stage 1 Live Data Spine Integration Test
+
+Imports all four client wrappers and runs them sequentially.
+Each source is wrapped individually so one failure doesn't block the others.
+"""
+
 import sys
-from shared.clients.eia_client import fetch_latest_brent_price
-from shared.clients.gdelt_client import fetch_latest_events
-from shared.clients.ais_client import get_sample_ship_position
-from shared.clients.ofac_client import check_entity_sanctions
+import os
+import io
 
-# Ensure stdout encodes UTF-8 properly on Windows
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+# Fix Windows console encoding
+if sys.stdout.encoding != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if sys.stderr.encoding != "utf-8":
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-def run_test_spine():
-    print("==================================================")
-    print("PRAVAH: Testing Live Data Spine Clients")
-    print("==================================================\n")
+# Ensure the shared/clients directory is in the path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-    # 1. EIA crude price
-    print("--- 1. Testing EIA Client ---")
-    try:
-        eia_res = fetch_latest_brent_price()
-        print(f"✅ EIA (crude price): {eia_res}\n")
-    except Exception as e:
-        print(f"❌ EIA (crude price) failed: {e}\n")
+from eia_client import fetch_latest_brent_price
+from gdelt_client import fetch_latest_events
+from ais_client import get_sample_ship_position
+from ofac_client import check_entity_sanctions, KNOWN_SANCTIONED_ENTITY
 
-    # 2. GDELT event record
-    print("--- 2. Testing GDELT Client ---")
-    try:
-        gdelt_res = fetch_latest_events()
-        print(f"✅ GDELT (event record): {gdelt_res}\n")
-    except Exception as e:
-        print(f"❌ GDELT (event record) failed: {e}\n")
+def main():
+    print("=" * 70)
+    print("  Pravah Stage 1 — Live Data Spine Test")
+    print("=" * 70)
+    print()
 
-    # 3. aisstream ship position (async)
-    print("--- 3. Testing AIS Client ---")
-    try:
-        ais_res = asyncio.run(get_sample_ship_position())
-        print(f"✅ aisstream (ship position): {ais_res}\n")
-    except Exception as e:
-        print(f"❌ aisstream (ship position) failed: {e}\n")
+    sources = {
+        "EIA (crude price)": fetch_latest_brent_price,
+        "GDELT (event record)": fetch_latest_events,
+        "aisstream (ship position)": get_sample_ship_position,
+        "OFAC (sanctions check - sanctioned)": lambda: check_entity_sanctions(KNOWN_SANCTIONED_ENTITY),
+        "OFAC (sanctions check - clean)": lambda: check_entity_sanctions("A RANDOM CLEAN TANKER"),
+    }
 
-    # 4. OFAC sanctions check
-    print("--- 4. Testing OFAC Client ---")
-    try:
-        # Check a known sanctioned entity (YAZD)
-        ofac_res = check_entity_sanctions("YAZD")
-        print(f"✅ OFAC (sanctions check for 'YAZD' - expected True): {ofac_res}")
-        # Check a clean entity
-        ofac_clean = check_entity_sanctions("A RANDOM TANKER THAT IS NOT SANCTIONED")
-        print(f"✅ OFAC (sanctions check for clean entity - expected False): {ofac_clean}\n")
-    except Exception as e:
-        print(f"❌ OFAC (sanctions check) failed: {e}\n")
+    results = {}
+    passed = 0
+    failed = 0
 
-    print("==================================================")
-    print("Test Spine Run Complete.")
-    print("==================================================")
+    for label, fn in sources.items():
+        print(f"--- Testing: {label} ---")
+        try:
+            result = fn()
+            print(f"[PASS] {label}: {result}")
+            results[label] = ("PASS", result)
+            passed += 1
+        except Exception as e:
+            print(f"[FAIL] {label}: {e}")
+            results[label] = ("FAIL", str(e))
+            failed += 1
+        print()
+
+    # Summary
+    print("=" * 70)
+    print(f"  Results: {passed} passed, {failed} failed out of {len(sources)} sources")
+    print("=" * 70)
+
+    for label, (status, _) in results.items():
+        icon = "[PASS]" if status == "PASS" else "[FAIL]"
+        print(f"  {icon} {label}")
+
+    print()
+    if failed == 0:
+        print("Stage 1 Complete — All data sources are live!")
+    elif passed > 0:
+        print(
+            f"Partial pass ({passed}/{len(sources)}). "
+            "Fix the failing sources next — the rest are ready."
+        )
+    else:
+        print("All sources failed. Check API keys and network connectivity.")
+
+    return failed
 
 if __name__ == "__main__":
-    run_test_spine()
+    exit_code = main()
+    sys.exit(exit_code)
