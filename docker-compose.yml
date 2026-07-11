@@ -1,10 +1,15 @@
-version: '3.8'
 services:
+  procurement-agent:
+    build: ./procurement-agent
+    ports:
+      - "8003:8000"
+    restart: unless-stopped
+
   # frontend:
   #   build: ./frontend
   #   ports:
   #     - "3000:3000"
-  
+
   # risk-agent:
   #   build: ./risk-agent
   #   ports:
@@ -14,11 +19,6 @@ services:
   #   build: ./scenario-engine
   #   ports:
   #     - "8002:8000"
-
-  # procurement-agent:
-  #   build: ./procurement-agent
-  #   ports:
-  #     - "8003:8000"
 
   # spr-agent:
   #   build: ./spr-agent

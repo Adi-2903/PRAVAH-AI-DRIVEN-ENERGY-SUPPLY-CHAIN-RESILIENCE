@@ -137,8 +137,11 @@ async def recommend(req: RecommendRequest):
     market = await fetch_live_market_data()
 
     # ── Find all valid supplier paths ────────────────────────────────────────
+    # Strategy: collect ALL shortest-length valid paths per supplier so that
+    # ties in path length can be broken by composite score (spec requirement).
     suppliers = [n for n, d in G.nodes(data=True) if d.get("type") == "supplier"]
-    all_candidates = []
+    # Maps supplier_id → list[candidate_dict] (one per tied shortest path)
+    candidates_by_supplier: dict[str, list[dict]] = {}
     edges_traversed = 0
     baseline_cand = None
 
@@ -153,47 +156,55 @@ async def recommend(req: RecommendRequest):
         if not valid_paths:
             continue
 
-        # Pick the shortest valid path (most direct)
-        path = min(valid_paths, key=len)
-        edges_traversed += len(path) - 1
+        # Keep only the shortest paths; multiple may tie in length
+        min_len = min(len(p) for p in valid_paths)
+        shortest_paths = [p for p in valid_paths if len(p) == min_len]
+        edges_traversed += min_len - 1
 
-        # Extract route, port from path:  supplier → route → port → refinery → grade
-        route = path[1] if len(path) > 1 else None
-        port  = path[2] if len(path) > 2 else None
-        if route is None or port is None:
-            continue
-        if G.nodes[route].get("type") != "route":
-            continue
-        if G.nodes[port].get("type") != "port":
-            continue
+        per_supplier_cands = []
+        for path in shortest_paths:
+            # Extract route, port from path: supplier → route → port → refinery → grade
+            route = path[1] if len(path) > 1 else None
+            port  = path[2] if len(path) > 2 else None
+            if route is None or port is None:
+                continue
+            if G.nodes[route].get("type") != "route":
+                continue
+            if G.nodes[port].get("type") != "port":
+                continue
 
-        base_cost    = G.nodes[supplier].get("cost", 80.0)
-        live_cost    = get_live_cost(market, supplier, base_cost)
-        risk         = G.nodes[route].get("risk", 50)
-        transit_days = G[supplier][route].get("transit_days", 15)
+            base_cost    = G.nodes[supplier].get("cost", 80.0)
+            live_cost    = get_live_cost(market, supplier, base_cost)
+            risk         = G.nodes[route].get("risk", 50)
+            transit_days = G[supplier][route].get("transit_days", 15)
 
-        cand = {
-            "supplier":                    supplier,
-            "route":                       route,
-            "port":                        port,
-            "grade_match":                 req.required_crude_grade,
-            "grade_compatibility_score":   compatibility,
-            "estimated_cost_usd_per_bbl":  live_cost,
-            "transit_days":                transit_days,
-            "corridor_risk_score":         risk,
-            "route_display":               G.nodes[route].get("display", route),
-            "port_display":                G.nodes[port].get("display", port),
-            "supplier_country":            G.nodes[supplier].get("country", supplier),
-        }
+            cand = {
+                "supplier":                    supplier,
+                "route":                       route,
+                "port":                        port,
+                "grade_match":                 req.required_crude_grade,
+                "grade_compatibility_score":   compatibility,
+                "estimated_cost_usd_per_bbl":  live_cost,
+                "transit_days":                transit_days,
+                "corridor_risk_score":         risk,
+                "route_display":               G.nodes[route].get("display", route),
+                "port_display":                G.nodes[port].get("display", port),
+                "supplier_country":            G.nodes[supplier].get("country", supplier),
+            }
+            per_supplier_cands.append(cand)
+
+        if not per_supplier_cands:
+            continue
 
         if supplier == req.current_supplier:
-            # Override risk with real-time risk passed from the frontend
-            cand["corridor_risk_score"] = req.current_corridor_risk_score
-            baseline_cand = cand.copy()
+            # For the baseline we don't need score-based tie-breaking;
+            # just take the first shortest path and override the live risk.
+            baseline_cand = per_supplier_cands[0].copy()
+            baseline_cand["corridor_risk_score"] = req.current_corridor_risk_score
         else:
-            all_candidates.append(cand)
+            candidates_by_supplier[supplier] = per_supplier_cands
 
-    if not all_candidates and baseline_cand is None:
+    if not candidates_by_supplier and baseline_cand is None:
         raise HTTPException(status_code=404, detail="No valid routes found in supply graph")
 
     # Synthetic baseline if current supplier not in graph
@@ -214,11 +225,12 @@ async def recommend(req: RecommendRequest):
             "supplier_country":            "Saudi Arabia",
         }
 
-    # ── Deduplication: one best path per supplier ────────────────────────────
-    # (already handled since we pick the shortest valid path per supplier above)
+    # Flatten all tied candidates + baseline to compute normalization bounds
+    all_tied: list[dict] = [c for group in candidates_by_supplier.values() for c in group]
+    all_candidates_flat: list[dict] = []  # will hold one winner per supplier after dedup
 
-    # ── Normalization bounds ──────────────────────────────────────────────────
-    all_for_norm = all_candidates + [baseline_cand]
+    # ── Normalization bounds (over all tied candidates + baseline) ──────────
+    all_for_norm = all_tied + [baseline_cand]
     max_cost    = max(c["estimated_cost_usd_per_bbl"] for c in all_for_norm) or 1.0
     min_cost    = min(c["estimated_cost_usd_per_bbl"] for c in all_for_norm)
     max_risk    = max(c["corridor_risk_score"]         for c in all_for_norm) or 1.0
@@ -248,9 +260,15 @@ async def recommend(req: RecommendRequest):
         composite_score=b_score,
     )
 
+    # ── Deduplication: for each supplier, keep only the highest-scoring path ─
+    # When multiple paths tied on length, this is the spec-compliant tie-break.
+    for supplier_id, group in candidates_by_supplier.items():
+        best = max(group, key=composite)
+        all_candidates_flat.append(best)
+
     # ── Score & rank alternatives ─────────────────────────────────────────────
     scored = []
-    for cand in all_candidates:
+    for cand in all_candidates_flat:
         score = composite(cand)
         cost_delta    = cand["estimated_cost_usd_per_bbl"] - baseline_cand["estimated_cost_usd_per_bbl"]
         risk_delta    = cand["corridor_risk_score"]         - baseline_cand["corridor_risk_score"]
