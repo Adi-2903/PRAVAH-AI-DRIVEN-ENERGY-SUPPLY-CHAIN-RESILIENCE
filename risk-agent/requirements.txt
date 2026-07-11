@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+langgraph
+langchain-core
+supabase
+python-dotenv
+networkx
+requests
+pydantic
+pytest
+httpx
+# Optional: enables the Gemini 2.5 Flash classifier when GEMINI_API_KEY is set.
+# The agent runs fine without it (heuristic classifier).
+#   pip install google-generativeai
