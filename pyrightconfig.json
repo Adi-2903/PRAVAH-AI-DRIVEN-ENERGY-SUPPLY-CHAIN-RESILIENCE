@@ -1,0 +1,19 @@
+{
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "basic",
+  "reportMissingModuleSource": "none",
+  "extraPaths": [
+    "shared/clients",
+    "shared/db",
+    "shared",
+    "scenario-engine",
+    "spr-agent",
+    "risk-agent",
+    "procurement-agent"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "**/node_modules"
+  ]
+}
