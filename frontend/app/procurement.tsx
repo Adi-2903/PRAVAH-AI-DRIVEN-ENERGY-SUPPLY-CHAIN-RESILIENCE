@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { ComposableMap, Geographies, Geography, Marker, Line } from "react-simple-maps";
-import { ArrowDown, ArrowUp, Zap, ShieldAlert, Clock, RefreshCw, ChevronRight, ChevronLeft, Wifi, WifiOff, Trophy, Medal, Award } from "lucide-react";
+import { ArrowDown, ArrowUp, Zap, ShieldAlert, Clock, RefreshCw, ChevronRight, ChevronLeft, Wifi, WifiOff, Trophy, Medal, Award, FileDown } from "lucide-react";
+import { exportProcurementReport } from './lib/export';
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
@@ -313,9 +314,25 @@ export default function ProcurementModule() {
           <div style={{ width:360, height:"100%", overflowY:"auto", padding:"20px 16px" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
               <div style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>Ranked Alternatives</div>
-              {recs.length > 0 && (
-                <div style={{ fontSize:10, color:"#64748b", fontWeight:600 }}>{recs.length} found</div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {recs.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => exportProcurementReport(recs, baseline)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        padding: '4px 8px', borderRadius: 6,
+                        background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)',
+                        color: '#2563eb', fontSize: 9, fontWeight: 700,
+                        cursor: 'pointer', letterSpacing: '0.04em',
+                      }}
+                    >
+                      <FileDown size={10} /> PDF
+                    </button>
+                    <div style={{ fontSize:10, color:"#64748b", fontWeight:600 }}>{recs.length} found</div>
+                  </>
+                )}
+              </div>
             </div>
 
             {loading && recs.length === 0 ? (

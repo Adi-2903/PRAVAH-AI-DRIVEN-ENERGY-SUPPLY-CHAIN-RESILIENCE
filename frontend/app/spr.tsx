@@ -5,7 +5,8 @@ import {
   ComposedChart, Area, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
-import { Zap, Clock, Activity, CheckCircle2 } from 'lucide-react';
+import { Zap, Clock, Activity, CheckCircle2, FileDown } from 'lucide-react';
+import { exportSPRScheduleCSV } from './lib/export';
 
 interface DailySchedule {
   day: number;
@@ -286,6 +287,20 @@ export default function SPROptimizer() {
           <div className="card-dark">
             <div className="card-dark-header">
               <span className="label-caps" style={{ color: '#fff' }}>Day-by-Day Release Schedule</span>
+              {result && (
+                <button
+                  onClick={() => exportSPRScheduleCSV(result.schedule)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '5px 10px', borderRadius: 6,
+                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#94a3b8', fontSize: 10, fontWeight: 700,
+                    cursor: 'pointer', letterSpacing: '0.04em',
+                  }}
+                >
+                  <FileDown style={{ width: 12, height: 12 }} /> Export CSV
+                </button>
+              )}
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table data-table-dark">

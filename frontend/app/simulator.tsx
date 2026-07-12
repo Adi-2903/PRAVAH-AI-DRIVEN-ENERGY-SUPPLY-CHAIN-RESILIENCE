@@ -5,7 +5,8 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Cell, ReferenceLine
 } from 'recharts';
-import { AlertCircle, Info, RefreshCw, Database, CheckCircle, Clock } from 'lucide-react';
+import { AlertCircle, Info, RefreshCw, Database, CheckCircle, Clock, FileDown } from 'lucide-react';
+import { exportScenarioReport, exportToCSV } from './lib/export';
 
 interface SimResult {
   brent_price_distribution: { p10: number; p50: number; p90: number; mean: number; std_dev: number };
@@ -259,10 +260,26 @@ export default function ScenarioSimulator() {
 
           <div>
             <div className="label-caps" style={{ marginBottom: 6, color: 'transparent' }}>.</div>
-            <button onClick={run} disabled={loading} className="btn-primary" style={{ padding: '7px 16px' }}>
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Re-run
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={run} disabled={loading} className="btn-primary" style={{ padding: '7px 16px' }}>
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                Re-run
+              </button>
+              {result && (
+                <>
+                  <button onClick={() => exportScenarioReport(result)} className="btn-secondary" style={{ padding: '7px 12px' }}>
+                    <FileDown style={{ width: 14, height: 14 }} /> PDF
+                  </button>
+                  <button onClick={() => result.daily_price_path && exportToCSV(
+                    'PRAVAH_Scenario_Prices',
+                    ['Day', 'P10', 'P50', 'P90'],
+                    result.daily_price_path.map((d: any) => [d.day, d.p10.toFixed(2), d.p50.toFixed(2), d.p90.toFixed(2)])
+                  )} className="btn-secondary" style={{ padding: '7px 12px' }}>
+                    <FileDown style={{ width: 14, height: 14 }} /> CSV
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

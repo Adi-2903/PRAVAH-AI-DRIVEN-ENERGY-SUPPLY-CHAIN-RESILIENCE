@@ -5,6 +5,9 @@ import {
   AlertTriangle, TrendingUp, ChevronRight,
   Activity, BarChart3, Shield, Anchor, AlertCircle, Zap
 } from 'lucide-react';
+import DataFreshness from './components/data-freshness';
+import { MOCK_RISK_SCORE, CORRIDOR_RISK_DATA } from './lib/mock-data';
+import { exportToPDF } from './lib/export';
 
 const riskData = [
   { name: 'Strait of Hormuz',       short: 'HORMUZ',  score: 78.2, trend: 'up',     delta: '+5.8',  vol: 'Very High', barrels: '17M bbl/day' },
@@ -92,7 +95,10 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
           <div className="card-header">
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0f172a' }}>Global Supply Network</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Corridors · chokepoints · vessels</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                Corridors · chokepoints · vessels
+                <DataFreshness as_of={MOCK_RISK_SCORE.computed_at} compact />
+              </div>
             </div>
             <button
               onClick={() => onNavigate?.('risk')}
@@ -157,7 +163,10 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
           <div className="card-header">
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0f172a' }}>Corridor Risk Monitor</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Real-time geopolitical risk scoring</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                Real-time geopolitical risk scoring
+                <DataFreshness as_of={CORRIDOR_RISK_DATA[0].as_of} compact />
+              </div>
             </div>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
               <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'block' }} />
@@ -331,7 +340,21 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                 </span>
                 <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
               </button>
-              <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}>
+              <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}
+                onClick={() => exportToPDF(
+                  'Situation Report',
+                  [
+                    { heading: 'Composite Risk Index', content: `Current score: 74/100 (+12 pts vs 7-day average). Alert Level: 3 — Elevated. Primary driver: Strait of Hormuz corridor risk at 82/100 due to Iranian naval activity and AIS dark-shipping anomalies.` },
+                    { heading: 'Key Indicators', content: `Import Dependency: 88% of crude sourced from imports. Hormuz Transit: 42% of Indian crude imports. SPR Cover: 9.5 days (vs IEA 90-day benchmark). Brent Crude: $84.12/bbl (+2.94% 24h).` },
+                    { heading: 'Active Alerts', content: `CRITICAL: Iran seizes second tanker in Hormuz within 48h; US Fifth Fleet raises posture. HIGH: Anti-ship missile fired near Bab-el-Mandeb transit zone. ELEVATED: Shipping congestion at South African bunkering ports due to diversion flows.` },
+                  ],
+                  {
+                    headers: ['Corridor', 'Risk Score', '24h Change', 'Volatility', 'Throughput'],
+                    rows: riskData.map(r => [r.name, r.score.toFixed(1), r.delta, r.vol, r.barrels]),
+                  },
+                  MOCK_RISK_SCORE.reasoning_trail
+                )}
+              >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Zap style={{ width: 18, height: 18, color: '#eab308' }} /> Export Situation Report
                 </span>

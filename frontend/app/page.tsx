@@ -13,11 +13,18 @@ import {
   ChevronRight,
   Radio,
   Cpu,
+  Eye,
+  Users,
+  ChevronDown,
 } from 'lucide-react';
 import Dashboard from './dashboard';
 import ScenarioSimulator from './simulator';
 import SPROptimizer from './spr';
 import ProcurementModule from './procurement';
+import RiskIntelligence from './risk-intelligence';
+import CitizenView from './citizen-view';
+
+type ViewTier = 'citizen' | 'analyst' | 'policy';
 
 const TABS = [
   { id: 'dashboard',    label: 'Command Center',     icon: LayoutDashboard },
@@ -37,6 +44,89 @@ const TICKER_ITEMS = [
   { sym: 'DUBAI', val: '$82.90', chg: '+2.60%', up: true },
   { sym: 'OMAN',  val: '$83.15', chg: '+2.40%', up: true },
 ];
+
+const TIER_CONFIG = {
+  citizen: { label: 'Citizen', icon: Eye, color: '#22c55e', desc: 'Quick risk overview' },
+  analyst: { label: 'Analyst', icon: Users, color: '#3b82f6', desc: 'Deep analysis tools' },
+  policy:  { label: 'Policy Maker', icon: Shield, color: '#8b5cf6', desc: 'Strategic planning' },
+};
+
+function TierSwitcher({ tier, onSwitch }: { tier: ViewTier; onSwitch: (t: ViewTier) => void }) {
+  const [open, setOpen] = useState(false);
+  const cfg = TIER_CONFIG[tier];
+  const Icon = cfg.icon;
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '5px 12px', borderRadius: 8,
+          background: `${cfg.color}12`, border: `1px solid ${cfg.color}30`,
+          fontSize: 11, fontWeight: 700, color: cfg.color,
+          cursor: 'pointer', letterSpacing: '0.04em',
+        }}
+      >
+        <Icon style={{ width: 13, height: 13 }} />
+        {cfg.label} View
+        <ChevronDown style={{ width: 12, height: 12, opacity: 0.6 }} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6,
+          background: '#fff', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.15)', overflow: 'hidden', zIndex: 50,
+          minWidth: 200,
+        }}>
+          {(Object.keys(TIER_CONFIG) as ViewTier[]).map(t => {
+            const tc = TIER_CONFIG[t];
+            const TIcon = tc.icon;
+            const isActive = t === tier;
+            return (
+              <button
+                key={t}
+                onClick={() => { onSwitch(t); setOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                  padding: '12px 16px', background: isActive ? `${tc.color}08` : 'transparent',
+                  border: 'none', cursor: 'pointer', textAlign: 'left',
+                  borderBottom: '1px solid rgba(0,0,0,0.04)',
+                }}
+              >
+                <div style={{
+                  width: 28, height: 28, borderRadius: 8,
+                  background: `${tc.color}12`, border: `1px solid ${tc.color}25`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <TIcon style={{ width: 14, height: 14, color: tc.color }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? tc.color : '#0f172a' }}>
+                    {tc.label}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>{tc.desc}</div>
+                </div>
+                {isActive && (
+                  <div style={{
+                    marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%',
+                    background: tc.color,
+                  }} />
+                )}
+              </button>
+            );
+          })}
+          <div style={{ padding: '8px 16px', background: '#f8fafc' }}>
+            <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, lineHeight: 1.5 }}>
+              Auth is stubbed for prototype demo.
+              <br />No real login required.
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ComingSoon({ label }: { label: string }) {
   return (
@@ -64,6 +154,7 @@ function ComingSoon({ label }: { label: string }) {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [viewTier, setViewTier] = useState<ViewTier>('citizen');
   const [time, setTime] = useState('');
 
   useEffect(() => {
@@ -73,6 +164,14 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
+  // ─── Citizen View: Full-screen, no sidebar ───
+  if (viewTier === 'citizen') {
+    return (
+      <CitizenView onGoDeeper={() => { setViewTier('analyst'); setActiveTab('dashboard'); }} />
+    );
+  }
+
+  // ─── Analyst / Policy View: Full SPA shell ───
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#f0f2f7' }}>
 
@@ -258,18 +357,22 @@ export default function App() {
                 Prototype Build
               </span>
             </div>
-            <div style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              fontWeight: 600,
-              color: '#64748b',
-              background: '#f8fafc',
-              padding: '5px 12px',
-              borderRadius: 8,
-              border: '1px solid rgba(0,0,0,0.07)',
-              letterSpacing: '0.05em',
-            }}>
-              {time} IST
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <TierSwitcher tier={viewTier} onSwitch={setViewTier} />
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#64748b',
+                background: '#f8fafc',
+                padding: '5px 12px',
+                borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.07)',
+                letterSpacing: '0.05em',
+              }}>
+                {time} IST
+              </div>
             </div>
           </div>
 
@@ -325,8 +428,9 @@ export default function App() {
           {activeTab === 'dashboard'   && <Dashboard onNavigate={setActiveTab} />}
           {activeTab === 'simulator'   && <ScenarioSimulator />}
           {activeTab === 'spr'         && <SPROptimizer />}
-          {activeTab === 'risk'        && <ComingSoon label="Risk Intelligence Center" />}
+          {activeTab === 'risk'        && <RiskIntelligence />}
           {activeTab === 'procurement' && <ProcurementModule />}
+          {activeTab === 'twin'        && <ComingSoon label="Digital Twin" />}
         </main>
       </div>
     </div>
