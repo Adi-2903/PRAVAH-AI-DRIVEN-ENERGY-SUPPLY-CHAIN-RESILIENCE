@@ -22,7 +22,10 @@ const SERVICE_BASE: Record<Service, string> = {
 
 /** Build a fully-qualified URL for a service endpoint. */
 export function serviceUrl(service: Service, path: string): string {
-  const base = SERVICE_BASE[service].replace(/\/$/, '');
+  const base = (SERVICE_BASE[service] ?? '').replace(/\/$/, '');
+  if (!base && typeof console !== 'undefined') {
+    console.warn(`[api] no base URL configured for service "${service}" — falling back to a relative path.`);
+  }
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 }
 

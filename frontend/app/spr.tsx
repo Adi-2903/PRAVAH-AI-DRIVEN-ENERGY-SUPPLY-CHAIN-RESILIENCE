@@ -95,14 +95,15 @@ export default function SPROptimizer() {
           daily_risk_scores: mockInputs.risk,
           daily_price_forecast_usd_per_bbl: mockInputs.price,
           max_daily_drawdown_days: maxDrawdown
-        })
+        }),
+        signal: AbortSignal.timeout(8000)
       });
       if (!res.ok) throw new Error('API failed');
       setResult(await res.json());
       setIsMock(false);
     } catch (e) {
       try {
-        const m = await fetch(serviceUrl('spr', '/spr-schedule/mock'));
+        const m = await fetch(serviceUrl('spr', '/spr-schedule/mock'), { signal: AbortSignal.timeout(8000) });
         setResult(await m.json());
       } catch {
         const mockInputs = generateMockData(horizon);

@@ -14,7 +14,9 @@ export default function DataFreshness({ as_of, source, compact = false }: DataFr
 
   useEffect(() => {
     const update = () => {
-      const diff = Date.now() - new Date(as_of).getTime();
+      const ts = new Date(as_of).getTime();
+      if (Number.isNaN(ts)) { setRelativeTime('—'); setStatus('old'); return; }
+      const diff = Date.now() - ts;
       const minutes = Math.floor(diff / 60000);
       const hours = Math.floor(diff / 3600000);
 

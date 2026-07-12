@@ -114,7 +114,7 @@ export default function ScenarioSimulator() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(serviceUrl('scenario', '/data-status'));
+      const res = await fetch(serviceUrl('scenario', '/data-status'), { signal: AbortSignal.timeout(8000) });
       if (res.ok) setDataStatus(await res.json());
     } catch (err) {
       console.warn("Failed to fetch EIA API data status", err);
@@ -141,6 +141,7 @@ export default function ScenarioSimulator() {
       const res = await fetch(serviceUrl('scenario', '/simulate'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildPayload()),
+        signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) throw new Error('API error');
       const data = await res.json();
@@ -148,7 +149,7 @@ export default function ScenarioSimulator() {
       setIsMock(false);
     } catch {
       try {
-        const r = await fetch(serviceUrl('scenario', '/simulate/mock'));
+        const r = await fetch(serviceUrl('scenario', '/simulate/mock'), { signal: AbortSignal.timeout(8000) });
         const data = await r.json();
         setResult(data);
         setIsMock(true);

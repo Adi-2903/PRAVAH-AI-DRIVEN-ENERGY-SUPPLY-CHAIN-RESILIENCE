@@ -1,28 +1,43 @@
 // ═══════════════════════════════════════════════
 //  PRAVAH — PDF / CSV Export Utilities
 //  PDF via jspdf + jspdf-autotable; CSV is hand-rolled (RFC-4180 escaping).
+//  Every entry point is wrapped so a malformed field or a jsPDF failure
+//  surfaces a friendly message instead of an unhandled promise rejection.
 // ═══════════════════════════════════════════════
+
+/** Log + surface an export failure without crashing the click handler. */
+function reportExportError(kind: string, err: unknown): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error(`[export] ${kind} export failed:`, err);
+  if (typeof window !== 'undefined') {
+    window.alert(`Sorry — the ${kind} export failed and was cancelled.\n\n${msg}`);
+  }
+}
 
 /**
  * Export tabular data as a CSV file download.
  */
 export function exportToCSV(filename: string, headers: string[], rows: (string | number)[][]) {
-  const csvContent = [
-    headers.join(','),
-    ...rows.map(row => row.map(cell => {
-      const str = String(cell);
-      return str.includes(',') || str.includes('"') || str.includes('\n')
-        ? `"${str.replace(/"/g, '""')}"`
-        : str;
-    }).join(','))
-  ].join('\n');
+  try {
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        const str = String(cell);
+        return str.includes(',') || str.includes('"') || str.includes('\n')
+          ? `"${str.replace(/"/g, '""')}"`
+          : str;
+      }).join(','))
+    ].join('\n');
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (err) {
+    reportExportError('CSV', err);
+  }
 }
 
 /**
@@ -34,174 +49,190 @@ export async function exportToPDF(
   tableData?: { headers: string[]; rows: (string | number)[][] },
   reasoning?: string
 ) {
-  // Dynamic import to avoid SSR issues
-  const { default: jsPDF } = await import('jspdf');
-  const autoTable = (await import('jspdf-autotable')).default;
+  try {
+    // Dynamic import to avoid SSR issues
+    const { default: jsPDF } = await import('jspdf');
+    const autoTable = (await import('jspdf-autotable')).default;
 
-  const doc = new jsPDF('p', 'mm', 'a4');
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 20;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 20;
 
-  // ─── Header ───
-  doc.setFillColor(37, 99, 235);
-  doc.rect(0, 0, pageWidth, 28, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('PRAVAH', 14, 14);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Energy Supply Chain Resilience — India', 14, 21);
-  doc.setFontSize(8);
-  doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, pageWidth - 14, 14, { align: 'right' });
-  doc.text('PROTOTYPE — NOT FOR OPERATIONAL USE', pageWidth - 14, 21, { align: 'right' });
-
-  y = 38;
-
-  // ─── Title ───
-  doc.setTextColor(15, 23, 42);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(title, 14, y);
-  y += 10;
-
-  // ─── Sections ───
-  for (const section of sections) {
-    if (y > 260) { doc.addPage(); y = 20; }
-
-    doc.setFontSize(11);
+    // ─── Header ───
+    doc.setFillColor(37, 99, 235);
+    doc.rect(0, 0, pageWidth, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(37, 99, 235);
-    doc.text(section.heading, 14, y);
-    y += 6;
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-    const lines = doc.splitTextToSize(section.content, pageWidth - 28);
-    doc.text(lines, 14, y);
-    y += lines.length * 5 + 6;
-  }
-
-  // ─── Table ───
-  if (tableData) {
-    if (y > 200) { doc.addPage(); y = 20; }
-
-    autoTable(doc, {
-      startY: y,
-      head: [tableData.headers],
-      body: tableData.rows.map(row => row.map(String)),
-      styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: 14, right: 14 },
-    });
-    y = (doc as any).lastAutoTable.finalY + 10;
-  }
-
-  // ─── Reasoning Trail ───
-  if (reasoning) {
-    if (y > 230) { doc.addPage(); y = 20; }
-
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(59, 130, 246);
-
-    const reasoningLines = doc.splitTextToSize(reasoning, pageWidth - 40);
-    const boxHeight = reasoningLines.length * 5 + 12;
-
-    doc.roundedRect(14, y, pageWidth - 28, boxHeight, 3, 3, 'FD');
-
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(37, 99, 235);
-    doc.text('AI REASONING TRAIL', 18, y + 6);
-
+    doc.text('PRAVAH', 14, 14);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-    doc.text(reasoningLines, 18, y + 12);
-  }
+    doc.text('Energy Supply Chain Resilience — India', 14, 21);
+    doc.setFontSize(8);
+    doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, pageWidth - 14, 14, { align: 'right' });
+    doc.text('PROTOTYPE — NOT FOR OPERATIONAL USE', pageWidth - 14, 21, { align: 'right' });
 
-  // ─── Footer ───
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(7);
-    doc.setTextColor(148, 163, 184);
-    doc.text(
-      `PRAVAH Prototype — Page ${i} of ${pageCount} — Generated by AI Advisory Layer`,
-      pageWidth / 2,
-      doc.internal.pageSize.getHeight() - 8,
-      { align: 'center' }
-    );
-  }
+    y = 38;
 
-  doc.save(`PRAVAH_${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    // ─── Title ───
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, 14, y);
+    y += 10;
+
+    // ─── Sections ───
+    for (const section of sections) {
+      if (y > 260) { doc.addPage(); y = 20; }
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(37, 99, 235);
+      doc.text(section.heading, 14, y);
+      y += 6;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
+      const lines = doc.splitTextToSize(section.content, pageWidth - 28);
+      doc.text(lines, 14, y);
+      y += lines.length * 5 + 6;
+    }
+
+    // ─── Table ───
+    if (tableData) {
+      if (y > 200) { doc.addPage(); y = 20; }
+
+      autoTable(doc, {
+        startY: y,
+        head: [tableData.headers],
+        body: tableData.rows.map(row => row.map(String)),
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 14, right: 14 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // ─── Reasoning Trail ───
+    if (reasoning) {
+      if (y > 230) { doc.addPage(); y = 20; }
+
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(59, 130, 246);
+
+      const reasoningLines = doc.splitTextToSize(reasoning, pageWidth - 40);
+      const boxHeight = reasoningLines.length * 5 + 12;
+
+      doc.roundedRect(14, y, pageWidth - 28, boxHeight, 3, 3, 'FD');
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(37, 99, 235);
+      doc.text('AI REASONING TRAIL', 18, y + 6);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
+      doc.text(reasoningLines, 18, y + 12);
+    }
+
+    // ─── Footer ───
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(7);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        `PRAVAH Prototype — Page ${i} of ${pageCount} — Generated by AI Advisory Layer`,
+        pageWidth / 2,
+        doc.internal.pageSize.getHeight() - 8,
+        { align: 'center' }
+      );
+    }
+
+    doc.save(`PRAVAH_${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  } catch (err) {
+    reportExportError('PDF', err);
+  }
 }
 
 /**
  * Quick export: Scenario simulation results
  */
 export async function exportScenarioReport(result: any) {
-  await exportToPDF(
-    'Supply Shock Scenario Report',
-    [
-      {
-        heading: 'Scenario Summary',
-        content: `Brent crude projection: Median (P50) $${result.brent_price_distribution?.p50?.toFixed(2) ?? 'N/A'}/bbl, Worst case (P90) $${result.brent_price_distribution?.p90?.toFixed(2) ?? 'N/A'}/bbl. Standard deviation: ±$${result.brent_price_distribution?.std_dev?.toFixed(2) ?? 'N/A'}. Simulations run: ${result.num_simulations_run?.toLocaleString() ?? 'N/A'}.`
-      },
-      {
-        heading: 'Economic Impact',
-        content: `Pump price impact (P50): ₹${result.pump_price_impact?.projected_p50_inr_per_litre?.toFixed(2) ?? 'N/A'}/litre (from ₹${result.pump_price_impact?.current_inr_per_litre?.toFixed(2) ?? 'N/A'}/litre). GDP impact (P50): ${result.gdp_impact_pct?.p50?.toFixed(3) ?? 'N/A'}%. Data source: ${result.data_source ?? 'fallback_cache'}.`
-      },
-    ],
-    result.daily_price_path ? {
-      headers: ['Day', 'P10 (Best)', 'P50 (Median)', 'P90 (Worst)'],
-      rows: result.daily_price_path.slice(0, 14).map((d: any) => [
-        `Day ${d.day}`, `$${d.p10.toFixed(2)}`, `$${d.p50.toFixed(2)}`, `$${d.p90.toFixed(2)}`
-      ]),
-    } : undefined,
-    result.calibration_note
-  );
+  try {
+    await exportToPDF(
+      'Supply Shock Scenario Report',
+      [
+        {
+          heading: 'Scenario Summary',
+          content: `Brent crude projection: Median (P50) $${result.brent_price_distribution?.p50?.toFixed(2) ?? 'N/A'}/bbl, Worst case (P90) $${result.brent_price_distribution?.p90?.toFixed(2) ?? 'N/A'}/bbl. Standard deviation: ±$${result.brent_price_distribution?.std_dev?.toFixed(2) ?? 'N/A'}. Simulations run: ${result.num_simulations_run?.toLocaleString() ?? 'N/A'}.`
+        },
+        {
+          heading: 'Economic Impact',
+          content: `Pump price impact (P50): ₹${result.pump_price_impact?.projected_p50_inr_per_litre?.toFixed(2) ?? 'N/A'}/litre (from ₹${result.pump_price_impact?.current_inr_per_litre?.toFixed(2) ?? 'N/A'}/litre). GDP impact (P50): ${result.gdp_impact_pct?.p50?.toFixed(3) ?? 'N/A'}%. Data source: ${result.data_source ?? 'fallback_cache'}.`
+        },
+      ],
+      Array.isArray(result.daily_price_path) ? {
+        headers: ['Day', 'P10 (Best)', 'P50 (Median)', 'P90 (Worst)'],
+        rows: result.daily_price_path.slice(0, 14).map((d: any) => [
+          `Day ${d?.day ?? '—'}`, `$${d?.p10?.toFixed(2) ?? 'N/A'}`, `$${d?.p50?.toFixed(2) ?? 'N/A'}`, `$${d?.p90?.toFixed(2) ?? 'N/A'}`
+        ]),
+      } : undefined,
+      result.calibration_note
+    );
+  } catch (err) {
+    reportExportError('scenario report', err);
+  }
 }
 
 /**
  * Quick export: Procurement recommendations
  */
 export async function exportProcurementReport(recs: any[], baseline: any) {
-  await exportToPDF(
-    'Procurement Alternatives Report',
-    [
+  try {
+    await exportToPDF(
+      'Procurement Alternatives Report',
+      [
+        {
+          heading: 'Current Baseline',
+          content: `Supplier: ${baseline?.supplier ?? 'N/A'}. Cost: $${baseline?.estimated_cost_usd_per_bbl?.toFixed(1) ?? 'N/A'}/bbl. Risk: ${baseline?.corridor_risk_score ?? 'N/A'}/100. Transit: ${baseline?.transit_days ?? 'N/A'} days. Score: ${baseline?.composite_score?.toFixed(3) ?? 'N/A'}.`
+        },
+        {
+          heading: 'Optimization Parameters',
+          content: `Alternatives ranked by weighted composite score (cost, risk, transit, grade compatibility). Higher score = better alternative.`
+        },
+      ],
       {
-        heading: 'Current Baseline',
-        content: `Supplier: ${baseline?.supplier ?? 'N/A'}. Cost: $${baseline?.estimated_cost_usd_per_bbl?.toFixed(1) ?? 'N/A'}/bbl. Risk: ${baseline?.corridor_risk_score ?? 'N/A'}/100. Transit: ${baseline?.transit_days ?? 'N/A'} days. Score: ${baseline?.composite_score?.toFixed(3) ?? 'N/A'}.`
-      },
-      {
-        heading: 'Optimization Parameters',
-        content: `Alternatives ranked by weighted composite score (cost, risk, transit, grade compatibility). Higher score = better alternative.`
-      },
-    ],
-    {
-      headers: ['Rank', 'Supplier', 'Cost ($/bbl)', 'Risk', 'Transit', 'Score', 'Reasoning'],
-      rows: recs.map(r => [
-        r.rank, r.supplier, `$${r.estimated_cost_usd_per_bbl?.toFixed(1)}`,
-        `${r.corridor_risk_score}/100`, `${r.transit_days}d`,
-        r.composite_score?.toFixed(3), r.reasoning?.slice(0, 60) + '...'
-      ]),
-    }
-  );
+        headers: ['Rank', 'Supplier', 'Cost ($/bbl)', 'Risk', 'Transit', 'Score', 'Reasoning'],
+        rows: (recs ?? []).map(r => [
+          r?.rank ?? '—', r?.supplier ?? 'N/A', `$${r?.estimated_cost_usd_per_bbl?.toFixed(1) ?? 'N/A'}`,
+          `${r?.corridor_risk_score ?? 'N/A'}/100`, `${r?.transit_days ?? 'N/A'}d`,
+          r?.composite_score?.toFixed(3) ?? 'N/A', ((r?.reasoning ?? '').slice(0, 60)) + '...'
+        ]),
+      }
+    );
+  } catch (err) {
+    reportExportError('procurement report', err);
+  }
 }
 
 /**
  * Quick export: SPR schedule
  */
 export function exportSPRScheduleCSV(schedule: any[]) {
-  exportToCSV(
-    'PRAVAH_SPR_Schedule',
-    ['Day', 'Drawdown (days)', 'Reserve After (days)', 'Risk Score', 'Price (USD)', 'Rationale'],
-    schedule.map(s => [
-      `D+${s.day}`, s.drawdown_days.toFixed(2), s.reserve_after_days.toFixed(2),
-      s.risk_score.toFixed(0), `$${s.price_usd.toFixed(2)}`, s.rationale
-    ])
-  );
+  try {
+    exportToCSV(
+      'PRAVAH_SPR_Schedule',
+      ['Day', 'Drawdown (days)', 'Reserve After (days)', 'Risk Score', 'Price (USD)', 'Rationale'],
+      (schedule ?? []).map(s => [
+        `D+${s?.day ?? '—'}`, s?.drawdown_days?.toFixed(2) ?? 'N/A', s?.reserve_after_days?.toFixed(2) ?? 'N/A',
+        s?.risk_score?.toFixed(0) ?? 'N/A', `$${s?.price_usd?.toFixed(2) ?? 'N/A'}`, s?.rationale ?? ''
+      ])
+    );
+  } catch (err) {
+    reportExportError('SPR schedule', err);
+  }
 }
