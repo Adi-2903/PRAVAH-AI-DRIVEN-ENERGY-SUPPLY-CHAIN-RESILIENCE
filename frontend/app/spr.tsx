@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { Zap, Clock, Activity, CheckCircle2, FileDown } from 'lucide-react';
 import { exportSPRScheduleCSV } from './lib/export';
+import { serviceUrl } from './lib/api';
 
 interface DailySchedule {
   day: number;
@@ -84,7 +85,7 @@ export default function SPROptimizer() {
     setLoading(true);
     try {
       const mockInputs = generateMockData(horizon);
-      const res = await fetch('http://127.0.0.1:8001/spr-schedule', {
+      const res = await fetch(serviceUrl('spr', '/spr-schedule'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,7 +102,7 @@ export default function SPROptimizer() {
       setIsMock(false);
     } catch (e) {
       try {
-        const m = await fetch('http://127.0.0.1:8001/spr-schedule/mock');
+        const m = await fetch(serviceUrl('spr', '/spr-schedule/mock'));
         setResult(await m.json());
       } catch {
         const mockInputs = generateMockData(horizon);

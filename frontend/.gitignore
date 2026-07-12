@@ -1,0 +1,6 @@
+# TypeScript incremental build cache — generated, should not be committed
+*.tsbuildinfo
+
+# Local env overrides
+.env.local
+.env*.local

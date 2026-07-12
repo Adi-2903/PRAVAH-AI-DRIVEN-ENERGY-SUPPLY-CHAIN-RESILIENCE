@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ComposableMap, Geographies, Geography, Marker, Line } from "react-simple-maps";
 import { ArrowDown, ArrowUp, Zap, ShieldAlert, Clock, RefreshCw, ChevronRight, ChevronLeft, Wifi, WifiOff, Trophy, Medal, Award, FileDown } from "lucide-react";
 import { exportProcurementReport } from './lib/export';
+import { serviceUrl } from './lib/api';
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
@@ -73,10 +74,28 @@ type Baseline = {
 };
 type Market = { brent_usd: number; wti_usd: number; usd_inr: number; is_live: boolean; };
 
-const RANK_ICONS = [<Trophy size={13}/>, <Medal size={13}/>, <Award size={13}/>];
+const RANK_ICONS = [<Trophy key="t" size={13}/>, <Medal key="m" size={13}/>, <Award key="a" size={13}/>];
 const RANK_COLORS = ["#f59e0b", "#94a3b8", "#cd7f32"];
 const RANK_BG = ["#fffbeb", "#f8fafc", "#fff8f3"];
 const RANK_BORDER = ["#fde68a", "#e2e8f0", "#fed7aa"];
+
+// Bundled sample data — used when the procurement-agent backend is unreachable
+// so the view is never a blank screen (mirrors the fallback simulator/spr already have).
+// Node/route/port IDs match NODE_COORDS so the map still renders paths.
+const PROCUREMENT_FALLBACK: {
+  recommendations: Rec[]; current_supplier_baseline: Baseline; market_data: Market; computed_at: string;
+} = {
+  recommendations: [
+    { supplier: "RUS_ROSNEFT", route: "cape_russia",  port: "PORT_VADINAR", grade_compatibility_score: 0.90, estimated_cost_usd_per_bbl: 63.0, transit_days: 24, corridor_risk_score: 21, composite_score: 0.81, rank: 1, reasoning: "Lowest corridor risk via Cape of Good Hope (21/100). ~$21/bbl discount vs. Arab Light baseline. 24-day transit is longer but acceptable for strategic diversification. 90% grade compatibility with Jamnagar (medium-sour blend)." },
+    { supplier: "USA_WTI",     route: "cape_mexico",   port: "PORT_MUMBAI",  grade_compatibility_score: 0.78, estimated_cost_usd_per_bbl: 74.0, transit_days: 40, corridor_risk_score: 15, composite_score: 0.68, rank: 2, reasoning: "Near-zero corridor risk via trans-Atlantic/Cape route. ~$10/bbl premium offsets the risk reduction. Longest transit (40d). Light-sweet grade needs blending at medium-sour-optimised refineries." },
+    { supplier: "NGA_NNPC",    route: "cape_nigeria",  port: "PORT_PARADIP", grade_compatibility_score: 0.72, estimated_cost_usd_per_bbl: 85.2, transit_days: 28, corridor_risk_score: 18, composite_score: 0.62, rank: 3, reasoning: "Low-risk African route via Cape. Premium pricing but high-quality light-sweet crude. 28-day transit. Limited refinery grade compatibility for Indian downstream needs." },
+    { supplier: "IRQ_SOMO",    route: "hormuz_iraq",   port: "PORT_VADINAR", grade_compatibility_score: 0.95, estimated_cost_usd_per_bbl: 79.1, transit_days: 9,  corridor_risk_score: 60, composite_score: 0.55, rank: 4, reasoning: "Best grade match (95%) and competitive $79/bbl pricing, but shares Hormuz transit risk (60/100) — only partial diversification. 9-day transit is fastest." },
+    { supplier: "UAE_ADNOC",   route: "hormuz_uae",    port: "PORT_VADINAR", grade_compatibility_score: 0.88, estimated_cost_usd_per_bbl: 82.9, transit_days: 7,  corridor_risk_score: 78, composite_score: 0.42, rank: 5, reasoning: "Shortest transit (7d) and good grade match (88%), but fully exposed to Hormuz corridor risk (78/100) — same chokepoint as the current Saudi baseline. No diversification benefit." },
+  ],
+  current_supplier_baseline: { supplier: "SAU_ARAMCO", estimated_cost_usd_per_bbl: 82.0, transit_days: 8, corridor_risk_score: 78, composite_score: 0.40 },
+  market_data: { brent_usd: 84.12, wti_usd: 80.55, usd_inr: 83.42, is_live: false },
+  computed_at: "",
+};
 
 export default function ProcurementModule() {
   const [costWeight, setCostWeight] = useState(0.5);
@@ -87,6 +106,7 @@ export default function ProcurementModule() {
   const [market, setMarket] = useState<Market | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   const [rightOpen, setRightOpen] = useState(true);
   const [lastComputed, setLastComputed] = useState("");
   const [selectedRec, setSelectedRec] = useState(0);
@@ -102,7 +122,7 @@ export default function ProcurementModule() {
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch("http://127.0.0.1:8000/recommend", {
+      const res = await fetch(serviceUrl('procurement', '/recommend'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -115,6 +135,7 @@ export default function ProcurementModule() {
           transit_time_weight: transitWeight,
           max_alternatives: 5,
         }),
+        signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "API error"); }
       const data = await res.json();
@@ -123,8 +144,15 @@ export default function ProcurementModule() {
       setMarket(data.market_data || null);
       setLastComputed(data.computed_at);
       setSelectedRec(0);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Backend unreachable");
+      setIsOffline(false);
+    } catch {
+      // Backend unreachable — degrade to bundled sample data (never a blank screen).
+      setRecs(PROCUREMENT_FALLBACK.recommendations);
+      setBaseline(PROCUREMENT_FALLBACK.current_supplier_baseline);
+      setMarket(PROCUREMENT_FALLBACK.market_data);
+      setLastComputed(new Date().toISOString());
+      setSelectedRec(0);
+      setIsOffline(true);
     } finally { setLoading(false); }
   }, [costWeight, riskWeight, transitWeight]);
 
@@ -313,7 +341,14 @@ export default function ProcurementModule() {
         <div style={{ width:rightOpen?360:0, overflow:"hidden", transition:"width 0.25s ease", background:"#fff", borderLeft:"1px solid #e2e8f0", display:"flex", flexDirection:"column", boxShadow:"-2px 0 8px rgba(0,0,0,0.04)" }}>
           <div style={{ width:360, height:"100%", overflowY:"auto", padding:"20px 16px" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>Ranked Alternatives</div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>Ranked Alternatives</div>
+                {isOffline && (
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:8, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#f59e0b", background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.25)", borderRadius:4, padding:"2px 6px" }}>
+                    <WifiOff size={9}/> Sample data
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {recs.length > 0 && (
                   <>

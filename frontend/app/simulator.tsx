@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { AlertCircle, Info, RefreshCw, Database, CheckCircle, Clock, FileDown } from 'lucide-react';
 import { exportScenarioReport, exportToCSV } from './lib/export';
+import { serviceUrl } from './lib/api';
 
 interface SimResult {
   brent_price_distribution: { p10: number; p50: number; p90: number; mean: number; std_dev: number };
@@ -113,7 +114,7 @@ export default function ScenarioSimulator() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/data-status');
+      const res = await fetch(serviceUrl('scenario', '/data-status'));
       if (res.ok) setDataStatus(await res.json());
     } catch (err) {
       console.warn("Failed to fetch EIA API data status", err);
@@ -137,7 +138,7 @@ export default function ScenarioSimulator() {
   const run = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://127.0.0.1:8000/simulate', {
+      const res = await fetch(serviceUrl('scenario', '/simulate'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildPayload()),
       });
@@ -147,7 +148,7 @@ export default function ScenarioSimulator() {
       setIsMock(false);
     } catch {
       try {
-        const r = await fetch('http://127.0.0.1:8000/simulate/mock');
+        const r = await fetch(serviceUrl('scenario', '/simulate/mock'));
         const data = await r.json();
         setResult(data);
         setIsMock(true);
