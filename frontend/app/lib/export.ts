@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════
 //  PRAVAH — PDF / CSV Export Utilities
-//  Uses jspdf + jspdf-autotable + papaparse
+//  PDF via jspdf + jspdf-autotable; CSV is hand-rolled (RFC-4180 escaping).
 // ═══════════════════════════════════════════════
 
 /**

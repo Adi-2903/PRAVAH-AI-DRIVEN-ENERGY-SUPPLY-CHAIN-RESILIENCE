@@ -6,22 +6,18 @@ import {
   Activity, BarChart3, Shield, Anchor, AlertCircle, Zap
 } from 'lucide-react';
 import DataFreshness from './components/data-freshness';
-import { MOCK_RISK_SCORE, CORRIDOR_RISK_DATA } from './lib/mock-data';
+import { MOCK_RISK_SCORE, CORRIDOR_RISK_DATA, LIVE_SIGNALS } from './lib/mock-data';
 import { exportToPDF } from './lib/export';
 
-const riskData = [
-  { name: 'Strait of Hormuz',       short: 'HORMUZ',  score: 78.2, trend: 'up',     delta: '+5.8',  vol: 'Very High', barrels: '17M bbl/day' },
-  { name: 'Red Sea / Bab-el-Mandeb', short: 'RED SEA', score: 64.5, trend: 'up',     delta: '+12.3', vol: 'High',      barrels: '8M bbl/day'  },
-  { name: 'Cape of Good Hope',       short: 'CAPE',    score: 22.1, trend: 'down',   delta: '-3.2',  vol: 'Low',       barrels: '4M bbl/day'  },
-  { name: 'Malacca Strait',          short: 'MALACCA', score: 14.8, trend: 'stable', delta: '+0.2',  vol: 'Low',       barrels: '6M bbl/day'  },
-];
+// Single source of truth: derive the corridor table + feed from mock-data.ts
+// (same data the Citizen and Risk Intelligence views use) so scores never
+// disagree across screens. Swap mock-data.ts for live endpoints in Stage 9.
+const riskData = CORRIDOR_RISK_DATA.map(c => ({
+  name: c.name, short: c.short, score: c.score,
+  trend: c.trend, delta: c.delta, vol: c.volatility, barrels: c.barrels,
+}));
 
-const feedItems = [
-  { time: '14:22 IST', source: 'REUTERS', type: 'NEWS',    corridor: 'HORMUZ',  text: 'Iran seizes second tanker in Hormuz within 48 hours; US Fifth Fleet raises posture.', severity: 'CRITICAL', color: 'critical' },
-  { time: '13:48 IST', source: 'AIS',     type: 'VESSEL',  corridor: 'RED SEA', text: 'Anti-ship missile fired near commercial vessel transit zone in southern corridor.', severity: 'HIGH', color: 'high' },
-  { time: '11:15 IST', source: 'MARKET',  type: 'PREMIUM', corridor: 'CAPE',    text: 'Shipping congestion increases at South African bunkering ports due to diversion flows.', severity: 'ELEVATED', color: 'elevated' },
-  { time: '09:30 IST', source: 'MARKET',  type: 'INSURE',  corridor: 'HORMUZ',  text: 'Insurance premiums for Indian flagged crude carriers rise by 15% following regional alerts.', severity: 'HIGH', color: 'high' },
-];
+const feedItems = LIVE_SIGNALS.slice(0, 4);
 
 function RiskBar({ score }: { score: number }) {
   const color = score > 70 ? '#ef4444' : score > 45 ? '#f97316' : '#22c55e';
@@ -207,10 +203,10 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                     <td>
                       <span style={{
                         fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700,
-                        color: row.trend === 'up' ? '#ef4444' : '#22c55e',
+                        color: row.trend === 'up' ? '#ef4444' : row.trend === 'down' ? '#22c55e' : '#94a3b8',
                         display: 'flex', alignItems: 'center', gap: 4
                       }}>
-                        {row.trend === 'up' ? '▲' : '▼'} {row.delta}
+                        {row.trend === 'up' ? '▲' : row.trend === 'down' ? '▼' : '━'} {row.delta}
                       </span>
                     </td>
                     <td>

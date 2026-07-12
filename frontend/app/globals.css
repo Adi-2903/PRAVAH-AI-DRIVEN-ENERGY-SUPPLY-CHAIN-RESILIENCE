@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap');
+/* Fonts are self-hosted via next/font in app/layout.tsx (--font-inter,
+   --font-jbmono, --font-playfair). No runtime CDN fetch. */
 
 /* ═══════════════════════════════════════════════
    ENSURE — Design System Tokens
@@ -43,10 +44,10 @@
   --info-blue-bg: rgba(59,130,246,0.08);
   --info-blue-border: rgba(59,130,246,0.2);
 
-  /* Font */
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
-  --font-display: 'Playfair Display', Georgia, serif;
+  /* Font — provided by next/font (layout.tsx), with system fallbacks */
+  --font-body: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: var(--font-jbmono), 'JetBrains Mono', 'Courier New', monospace;
+  --font-display: var(--font-playfair), 'Playfair Display', Georgia, serif;
 }
 
 /* ═══════════════════════════════════════════════
