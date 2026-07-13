@@ -1,10 +1,18 @@
-from fastapi import FastAPI, HTTPException
+import os
+import sys
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as np
 from scipy.optimize import linprog
 
 from models import SPRScheduleRequest, SPRScheduleResponse, DailySchedule
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_HERE)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from shared.auth import get_current_user
 
 app = FastAPI(title="SPR Optimizer Agent")
 
@@ -25,7 +33,7 @@ def health():
     return {"status": "ok"}
 
 @app.post("/spr-schedule", response_model=SPRScheduleResponse)
-def compute_schedule(req: SPRScheduleRequest):
+def compute_schedule(req: SPRScheduleRequest, user=Depends(get_current_user)):
     N = req.planning_horizon_days
     if len(req.daily_risk_scores) != N or len(req.daily_price_forecast_usd_per_bbl) != N:
         raise HTTPException(status_code=422, detail="Array lengths must match planning_horizon_days")
@@ -123,7 +131,7 @@ def compute_schedule(req: SPRScheduleRequest):
         savings_usd=round(savings, 2),
         savings_pct=round(savings_pct, 2),
         reserve_never_below_floor=bool(current_res >= req.min_safety_floor_days - 1e-5),
-        computed_at=datetime.utcnow().isoformat() + "Z"
+        computed_at=datetime.now(timezone.utc).isoformat() + "Z"
     )
 
 @app.get("/spr-schedule/mock", response_model=SPRScheduleResponse)
@@ -145,5 +153,5 @@ def mock_schedule():
         savings_usd=8000000.0,
         savings_pct=16.0,
         reserve_never_below_floor=True,
-        computed_at=datetime.utcnow().isoformat() + "Z"
+        computed_at=datetime.now(timezone.utc).isoformat() + "Z"
     )

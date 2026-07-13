@@ -8,7 +8,7 @@
 
 import { fetchWithFallback } from './mock-data';
 
-export type Service = 'risk' | 'scenario' | 'procurement' | 'spr' | 'coordinator';
+export type Service = 'risk' | 'scenario' | 'procurement' | 'spr' | 'coordinator' | 'shared';
 
 // Defaults align with docker-compose.yml host port mappings.
 // A standalone `uvicorn` agent defaults to :8000 — override per-service via env.
@@ -18,6 +18,7 @@ const SERVICE_BASE: Record<Service, string> = {
   procurement: process.env.NEXT_PUBLIC_PROCUREMENT_URL ?? 'http://127.0.0.1:8003',
   spr:         process.env.NEXT_PUBLIC_SPR_URL         ?? 'http://127.0.0.1:8004',
   coordinator: process.env.NEXT_PUBLIC_COORDINATOR_URL ?? 'http://127.0.0.1:8005',
+  shared:      process.env.NEXT_PUBLIC_SHARED_URL      ?? 'http://127.0.0.1:8000',
 };
 
 /** Build a fully-qualified URL for a service endpoint. */
@@ -34,16 +35,26 @@ export function serviceUrl(service: Service, path: string): string {
  * Use this when the caller wants to run its own catch/fallback logic.
  */
 export async function postJSON<T>(service: Service, path: string, body: unknown): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('pravah_access_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
   const res = await fetch(serviceUrl(service, path), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     try { const e = await res.json(); detail = e.detail || detail; } catch { /* ignore */ }
-    throw new Error(detail);
+    const err = new Error(detail);
+    (err as any).status = res.status;
+    throw err;
   }
   return res.json() as Promise<T>;
 }

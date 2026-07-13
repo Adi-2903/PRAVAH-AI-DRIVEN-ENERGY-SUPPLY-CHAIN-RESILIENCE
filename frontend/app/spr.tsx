@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { Zap, Clock, Activity, CheckCircle2, FileDown } from 'lucide-react';
 import { exportSPRScheduleCSV } from './lib/export';
-import { serviceUrl } from './lib/api';
+import { serviceUrl, postJSON } from './lib/api';
 
 interface DailySchedule {
   day: number;
@@ -85,23 +85,22 @@ export default function SPROptimizer() {
     setLoading(true);
     try {
       const mockInputs = generateMockData(horizon);
-      const res = await fetch(serviceUrl('spr', '/spr-schedule'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await postJSON<SPRScheduleResponse>('spr', '/spr-schedule', {
           planning_horizon_days: horizon,
           current_reserve_days: currentReserve,
           min_safety_floor_days: floor,
           daily_risk_scores: mockInputs.risk,
           daily_price_forecast_usd_per_bbl: mockInputs.price,
           max_daily_drawdown_days: maxDrawdown
-        }),
-        signal: AbortSignal.timeout(8000)
-      });
-      if (!res.ok) throw new Error('API failed');
-      setResult(await res.json());
+        });
+      setResult(data);
       setIsMock(false);
-    } catch (e) {
+    } catch (e: any) {
+      if (e.status === 401 || (e.message && e.message.includes('401'))) {
+        alert("Session expired or unauthorized. Please log in again.");
+        window.location.href = "/";
+        return;
+      }
       try {
         const m = await fetch(serviceUrl('spr', '/spr-schedule/mock'), { signal: AbortSignal.timeout(8000) });
         setResult(await m.json());

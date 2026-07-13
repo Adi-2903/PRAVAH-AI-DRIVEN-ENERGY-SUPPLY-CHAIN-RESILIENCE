@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ComposableMap, Geographies, Geography, Marker, Line } from "react-simple-maps";
 import { ArrowDown, ArrowUp, Zap, ShieldAlert, Clock, RefreshCw, ChevronRight, ChevronLeft, Wifi, WifiOff, Trophy, Medal, Award, FileDown } from "lucide-react";
 import { exportProcurementReport } from './lib/export';
-import { serviceUrl } from './lib/api';
+import { serviceUrl, postJSON } from './lib/api';
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
@@ -122,10 +122,7 @@ export default function ProcurementModule() {
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch(serviceUrl('procurement', '/recommend'), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await postJSON<any>('procurement', '/recommend', {
           current_supplier: "SAU_ARAMCO",
           current_corridor_risk_score: 78,
           target_refinery: "REF_JAMNAGAR",
@@ -134,18 +131,19 @@ export default function ProcurementModule() {
           risk_weight: riskWeight,
           transit_time_weight: transitWeight,
           max_alternatives: 5,
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "API error"); }
-      const data = await res.json();
+        });
       setRecs(data.recommendations || []);
       setBaseline(data.current_supplier_baseline);
       setMarket(data.market_data || null);
       setLastComputed(data.computed_at);
       setSelectedRec(0);
       setIsOffline(false);
-    } catch {
+    } catch (err: any) {
+      if (err.status === 401 || (err.message && err.message.includes('401'))) {
+        alert("Session expired or unauthorized. Please log in again.");
+        window.location.href = "/";
+        return;
+      }
       // Backend unreachable — degrade to bundled sample data (never a blank screen).
       setRecs(PROCUREMENT_FALLBACK.recommendations);
       setBaseline(PROCUREMENT_FALLBACK.current_supplier_baseline);

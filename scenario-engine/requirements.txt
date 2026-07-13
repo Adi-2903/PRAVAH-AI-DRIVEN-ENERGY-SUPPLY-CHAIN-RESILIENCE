@@ -4,3 +4,5 @@ pydantic
 numpy
 pytest
 httpx
+supabase
+python-dotenv

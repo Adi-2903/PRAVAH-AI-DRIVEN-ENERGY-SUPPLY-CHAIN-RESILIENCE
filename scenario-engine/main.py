@@ -1,18 +1,26 @@
 import numpy as np
+import os
+import sys
 from datetime import datetime, timezone
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from models import (
     SimulateRequest, SimulateResponse, DistributionStats,
     DailyPriceStats, PumpPriceImpact, GDPImpactPct
 )
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_HERE)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from shared.auth import get_current_user
+
 app = FastAPI(title="Scenario Engine")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # wildcard origin + credentials=True is rejected by browsers
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -90,7 +98,7 @@ def simulate_mock():
     )
 
 @app.post("/simulate", response_model=SimulateResponse)
-def simulate(req: SimulateRequest):
+def simulate(req: SimulateRequest, user=Depends(get_current_user)):
     S0 = req.current_brent_usd
     days = req.shock_duration_days
     N = req.num_simulations

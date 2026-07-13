@@ -5,3 +5,5 @@ scipy
 numpy
 pytest
 httpx
+supabase
+python-dotenv

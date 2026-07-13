@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { AlertCircle, Info, RefreshCw, Database, CheckCircle, Clock, FileDown } from 'lucide-react';
 import { exportScenarioReport, exportToCSV } from './lib/export';
-import { serviceUrl } from './lib/api';
+import { serviceUrl, postJSON } from './lib/api';
 
 interface SimResult {
   brent_price_distribution: { p10: number; p50: number; p90: number; mean: number; std_dev: number };
@@ -138,16 +138,15 @@ export default function ScenarioSimulator() {
   const run = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(serviceUrl('scenario', '/simulate'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildPayload()),
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) throw new Error('API error');
-      const data = await res.json();
+      const data = await postJSON<SimResult>('scenario', '/simulate', buildPayload());
       setResult(data);
       setIsMock(false);
-    } catch {
+    } catch (err: any) {
+      if (err.status === 401 || (err.message && err.message.includes('401'))) {
+        alert("Session expired or unauthorized. Please log in again.");
+        window.location.href = "/";
+        return;
+      }
       try {
         const r = await fetch(serviceUrl('scenario', '/simulate/mock'), { signal: AbortSignal.timeout(8000) });
         const data = await r.json();

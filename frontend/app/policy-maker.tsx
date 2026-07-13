@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Shield, Lock, RefreshCw, FileDown, Printer, CheckCircle, AlertTriangle, Zap, TrendingUp, Clock, Star } from 'lucide-react';
 import { exportPolicyDocument, printReport } from './lib/export';
+import { postJSON } from './lib/api';
 
 const POLICY_CREDS = { username: 'pravah_pm', password: 'Hormuz@2026' };
 
@@ -58,17 +59,21 @@ function LoginModal({ onLogin }: { onLogin: () => void }) {
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      if (user === POLICY_CREDS.username && pass === POLICY_CREDS.password) {
-        onLogin();
-      } else {
-        setErr('Invalid credentials. Access denied.');
-        setLoading(false);
-      }
-    }, 800);
+    setErr('');
+    try {
+      const res = await postJSON<{ access_token: string; user_id: string }>('shared', '/auth/login', {
+        email: user,
+        password: pass
+      });
+      localStorage.setItem('pravah_access_token', res.access_token);
+      onLogin();
+    } catch (error: any) {
+      setErr(error.message || 'Invalid credentials. Access denied.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,15 +91,15 @@ function LoginModal({ onLogin }: { onLogin: () => void }) {
         <div style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0', padding: '8px 36px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Lock style={{ width: 11, height: 11, color: '#16a34a', flexShrink: 0 }} />
           <span style={{ fontSize: 11, color: '#15803d', fontWeight: 600 }}>
-            Demo: <code style={{ background: '#dcfce7', padding: '1px 5px', borderRadius: 4, fontSize: 10 }}>pravah_pm</code> / <code style={{ background: '#dcfce7', padding: '1px 5px', borderRadius: 4, fontSize: 10 }}>Hormuz@2026</code>
+            Demo: <code style={{ background: '#dcfce7', padding: '1px 5px', borderRadius: 4, fontSize: 10 }}>pm@pravah.gov</code> / <code style={{ background: '#dcfce7', padding: '1px 5px', borderRadius: 4, fontSize: 10 }}>Hormuz@2026</code>
           </span>
         </div>
         {/* Form */}
         <form onSubmit={submit} style={{ padding: '22px 36px 24px' }}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 10, fontWeight: 700, color: '#374151', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Username</label>
-            <input value={user} onChange={e => { setUser(e.target.value); setErr(''); }}
-              placeholder="Enter username" autoComplete="username"
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#374151', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Email</label>
+            <input type="email" value={user} onChange={e => { setUser(e.target.value); setErr(''); }}
+              placeholder="Enter email" autoComplete="username"
               style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: err ? '1.5px solid #ef4444' : '1.5px solid #e2e8f0', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
           </div>
           <div style={{ marginBottom: 18 }}>
@@ -208,7 +213,7 @@ export default function PolicyMaker() {
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
               <Shield style={{ width: 12, height: 12, color: '#8b5cf6' }} />
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#8b5cf6', letterSpacing: '0.06em' }}>Authenticated: pravah_pm</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#8b5cf6', letterSpacing: '0.06em' }}>Authenticated: pm@pravah.gov</span>
             </div>
           </div>
         </div>

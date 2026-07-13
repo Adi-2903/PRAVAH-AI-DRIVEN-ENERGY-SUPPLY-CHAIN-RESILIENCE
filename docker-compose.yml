@@ -1,8 +1,18 @@
 services:
   procurement-agent:
-    build: ./procurement-agent
+    build:
+      context: .
+      dockerfile: procurement-agent/Dockerfile
     ports:
       - "8003:8000"
+    restart: unless-stopped
+
+  shared:
+    build:
+      context: .
+      dockerfile: shared/Dockerfile
+    ports:
+      - "8000:8000"
     restart: unless-stopped
 
   # frontend:
@@ -15,15 +25,19 @@ services:
   #   ports:
   #     - "8001:8000"
 
-  # scenario-engine:
-  #   build: ./scenario-engine
-  #   ports:
-  #     - "8002:8000"
+  scenario-engine:
+    build:
+      context: .
+      dockerfile: scenario-engine/Dockerfile
+    ports:
+      - "8002:8000"
 
-  # spr-agent:
-  #   build: ./spr-agent
-  #   ports:
-  #     - "8004:8000"
+  spr-agent:
+    build:
+      context: .
+      dockerfile: spr-agent/Dockerfile
+    ports:
+      - "8004:8000"
 
   # coordinator:
   #   build: ./coordinator

@@ -1,11 +1,18 @@
 import os
+import sys
 import httpx
 import asyncio
 import networkx as nx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 from typing import Optional
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_HERE)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from shared.auth import get_current_user
 
 from models import RecommendRequest, RecommendResponse, RecommendationItem, Baseline, GraphStats, LiveMarketData
 from knowledge_graph.graph_builder import build_procurement_graph, get_grade_compatibility
@@ -109,7 +116,7 @@ async def get_market():
 
 # ── Core recommendation endpoint ────────────────────────────────────────────
 @app.post("/recommend", response_model=RecommendResponse)
-async def recommend(req: RecommendRequest):
+async def recommend(req: RecommendRequest, user=Depends(get_current_user)):
     # Validate refinery
     if req.target_refinery not in G.nodes or G.nodes[req.target_refinery].get("type") != "refinery":
         available = [n for n, d in G.nodes(data=True) if d.get("type") == "refinery"]
