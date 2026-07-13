@@ -10,7 +10,7 @@ import pytest
 import io, zipfile
 import pandas as pd
 from unittest.mock import patch, MagicMock
-import eia_client, ofac_client, gdelt_client
+import eia_spot_client as eia_client, ofac_client, gdelt_client
 
 
 def make_eia_mock(json_data):
@@ -32,7 +32,7 @@ def make_sdn_df(names):
 def test_eia_missing_period_returns_none():
     response = {"response": {"data": [{"value": "85.0", "units": "$/barrel", "product-name": "Brent"}]}}
     with patch.object(eia_client, "EIA_API_KEY", "fake"), \
-         patch("eia_client.requests.get", return_value=make_eia_mock(response)):
+         patch("eia_spot_client.requests.get", return_value=make_eia_mock(response)):
         result = eia_client.fetch_latest_brent_price()
     assert result["date"] is None
 
@@ -41,14 +41,14 @@ def test_eia_negative_price_not_silently_dropped():
         {"period": "2026-07-10", "value": "-5.0", "units": "$/barrel", "product-name": "Brent"}
     ]}}
     with patch.object(eia_client, "EIA_API_KEY", "fake"), \
-         patch("eia_client.requests.get", return_value=make_eia_mock(response)):
+         patch("eia_spot_client.requests.get", return_value=make_eia_mock(response)):
         result = eia_client.fetch_latest_brent_price()
     assert result["price"] is not None  # value returned, not silently None
 
 def test_eia_missing_data_key_raises():
     response = {"response": {}}
     with patch.object(eia_client, "EIA_API_KEY", "fake"), \
-         patch("eia_client.requests.get", return_value=make_eia_mock(response)):
+         patch("eia_spot_client.requests.get", return_value=make_eia_mock(response)):
         with pytest.raises(ValueError):
             eia_client.fetch_latest_brent_price()
 

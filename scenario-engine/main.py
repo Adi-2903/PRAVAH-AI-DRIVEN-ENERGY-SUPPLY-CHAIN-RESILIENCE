@@ -25,7 +25,7 @@ DATA_SOURCE = "fallback_cache"
 def calibrate_volatility():
     global CALIBRATED_VOLATILITY, CALIBRATION_RANGE, DATA_SOURCE
     from datetime import date, timedelta
-    from data.eia_client import fetch_brent_spot_history, get_data_status
+    from data.eia_history_client import fetch_brent_spot_history, get_data_status
     
     end_date = date.today()
     start_date = end_date - timedelta(days=24 * 30.5)
@@ -58,7 +58,7 @@ def health():
 
 @app.get("/data-status")
 def data_status():
-    from data.eia_client import get_data_status
+    from data.eia_history_client import get_data_status
     return get_data_status()
 
 @app.get("/simulate/mock", response_model=SimulateResponse)

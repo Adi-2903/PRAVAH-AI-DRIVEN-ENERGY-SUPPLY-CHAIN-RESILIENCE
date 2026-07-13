@@ -10,7 +10,7 @@ if CLIENTS_DIR not in sys.path:
 import pytest
 import requests as _requests
 from unittest.mock import patch, MagicMock
-import eia_client  # ensure it's in sys.modules before any patching
+import eia_spot_client as eia_client  # aliased so test bodies remain unchanged
 
 
 def make_mock_response(json_data, status_code=200):
@@ -25,7 +25,7 @@ def make_mock_response(json_data, status_code=200):
 
 def test_eia_returns_parsed_dict(sample_eia_response):
     with patch.object(eia_client, "EIA_API_KEY", "fake_key"), \
-         patch("eia_client.requests.get", return_value=make_mock_response(sample_eia_response)):
+         patch("eia_spot_client.requests.get", return_value=make_mock_response(sample_eia_response)):
         result = eia_client.fetch_latest_brent_price()
     assert isinstance(result, dict)
     assert "date" in result
@@ -34,14 +34,14 @@ def test_eia_returns_parsed_dict(sample_eia_response):
 
 def test_eia_price_is_float(sample_eia_response):
     with patch.object(eia_client, "EIA_API_KEY", "fake_key"), \
-         patch("eia_client.requests.get", return_value=make_mock_response(sample_eia_response)):
+         patch("eia_spot_client.requests.get", return_value=make_mock_response(sample_eia_response)):
         result = eia_client.fetch_latest_brent_price()
     assert isinstance(result["price"], float)
     assert result["price"] > 0
 
 def test_eia_date_is_string(sample_eia_response):
     with patch.object(eia_client, "EIA_API_KEY", "fake_key"), \
-         patch("eia_client.requests.get", return_value=make_mock_response(sample_eia_response)):
+         patch("eia_spot_client.requests.get", return_value=make_mock_response(sample_eia_response)):
         result = eia_client.fetch_latest_brent_price()
     assert isinstance(result["date"], str)
     assert len(result["date"]) > 0

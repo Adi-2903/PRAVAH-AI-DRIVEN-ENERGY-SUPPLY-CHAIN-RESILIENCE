@@ -2,7 +2,7 @@ import os
 import pytest
 from unittest import mock
 import numpy as np
-from data.eia_client import fetch_brent_spot_history, get_data_status
+from data.eia_history_client import fetch_brent_spot_history, get_data_status
 
 # Mock data
 MOCK_API_RESPONSE = {
@@ -15,9 +15,9 @@ MOCK_API_RESPONSE = {
     }
 }
 
-@mock.patch("data.eia_client.httpx.get")
-@mock.patch("data.eia_client.os.getenv")
-@mock.patch("data.eia_client.get_cached_data")
+@mock.patch("data.eia_history_client.httpx.get")
+@mock.patch("data.eia_history_client.os.getenv")
+@mock.patch("data.eia_history_client.get_cached_data")
 def test_successful_eia_response(mock_cached, mock_getenv, mock_httpx_get):
     # Ensure no cache is used
     mock_cached.return_value = ([], 0.0)
@@ -41,9 +41,9 @@ def test_successful_eia_response(mock_cached, mock_getenv, mock_httpx_get):
     assert data[2]["date"] == "2026-07-10"
     assert data[2]["price_usd"] == 84.90
 
-@mock.patch("data.eia_client.httpx.get")
-@mock.patch("data.eia_client.os.getenv")
-@mock.patch("data.eia_client.get_cached_data")
+@mock.patch("data.eia_history_client.httpx.get")
+@mock.patch("data.eia_history_client.os.getenv")
+@mock.patch("data.eia_history_client.get_cached_data")
 def test_fallback_path_eia_failure(mock_cached, mock_getenv, mock_httpx_get):
     # Ensure no cache
     mock_cached.return_value = ([], 0.0)

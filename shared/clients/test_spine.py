@@ -19,7 +19,7 @@ if sys.stderr.encoding != "utf-8":
 # Ensure the shared/clients directory is in the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from eia_client import fetch_latest_brent_price
+from eia_spot_client import fetch_latest_brent_price
 from gdelt_client import fetch_latest_events
 from ais_client import get_sample_ship_position
 from ofac_client import check_entity_sanctions, KNOWN_SANCTIONED_ENTITY

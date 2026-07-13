@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.main import app
-from shared.clients.eia_client import fetch_latest_brent_price
+from shared.clients.eia_spot_client import fetch_latest_brent_price
 from shared.clients.gdelt_client import fetch_latest_events
 from shared.clients.ais_client import get_sample_ship_position
 from shared.clients.ofac_client import check_entity_sanctions, KNOWN_SANCTIONED_ENTITY

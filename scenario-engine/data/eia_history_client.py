@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 import httpx
 
-logger = logging.getLogger("eia_client")
+logger = logging.getLogger("eia_history_client")
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
