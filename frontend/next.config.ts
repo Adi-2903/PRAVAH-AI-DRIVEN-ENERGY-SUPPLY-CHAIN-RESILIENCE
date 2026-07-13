@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   output: 'standalone',
+  devIndicators: false,
   // Pin the file-tracing root to this app so Next doesn't pick the monorepo
   // root when multiple lockfiles are present.
   outputFileTracingRoot: __dirname,

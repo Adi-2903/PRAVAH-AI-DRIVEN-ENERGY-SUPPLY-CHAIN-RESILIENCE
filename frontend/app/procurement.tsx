@@ -306,11 +306,11 @@ export default function ProcurementModule() {
             <div style={{ fontSize:9, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>
               Impact: <span style={{ color:"#64748b" }}>{NODE_LABELS[baseline.supplier]||baseline.supplier}</span> → <span style={{ color:"#2563eb" }}>{NODE_LABELS[active.supplier]||active.supplier}</span>
             </div>
-            <div style={{ display:"flex", gap:18 }}>
+            <div style={{ display:"flex", gap:14 }}>
               {[
-                { label:"Cost Δ",    val:delta("estimated_cost_usd_per_bbl"), fmt:(v:number)=>`$${Math.abs(v).toFixed(2)}/bbl` },
-                { label:"Risk Δ",   val:delta("corridor_risk_score"),         fmt:(v:number)=>`${Math.abs(v).toFixed(0)} pts` },
-                { label:"Transit Δ",val:delta("transit_days"),                fmt:(v:number)=>`${Math.abs(v)}d` },
+                { label:"Cost/bbl Δ", val:delta("estimated_cost_usd_per_bbl"), fmt:(v:number)=>`${v<0?'-':'+'}$${Math.abs(v).toFixed(2)}` },
+                { label:"Risk Δ",     val:delta("corridor_risk_score"),         fmt:(v:number)=>`${v<0?'-':'+'}${Math.abs(v).toFixed(0)} pts` },
+                { label:"Transit Δ",  val:delta("transit_days"),                fmt:(v:number)=>`${v<0?'-':'+'}${Math.abs(v)}d` },
               ].map(({ label, val, fmt }) => (
                 <div key={label} style={{ display:"flex", flexDirection:"column", gap:2 }}>
                   <span style={{ fontSize:9, color:"#64748b", fontWeight:600 }}>{label}</span>
@@ -416,9 +416,9 @@ export default function ProcurementModule() {
                     {/* Metrics grid */}
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom:10 }}>
                       {[
-                        { Icon:Zap,         label:"Cost",    val:`$${rec.estimated_cost_usd_per_bbl.toFixed(1)}`,  color:"#3b82f6" },
-                        { Icon:ShieldAlert, label:"Risk",    val:`${rec.corridor_risk_score.toFixed(0)}/100`,       color: rec.corridor_risk_score>60?"#ef4444":rec.corridor_risk_score>30?"#f59e0b":"#10b981" },
-                        { Icon:Clock,       label:"Transit", val:`${rec.transit_days}d`,                            color:"#8b5cf6" },
+                        { Icon:Zap,         label:"Cost/bbl", val:`$${rec.estimated_cost_usd_per_bbl.toFixed(2)}/bbl`, color:"#3b82f6" },
+                        { Icon:ShieldAlert, label:"Risk",     val:`${rec.corridor_risk_score.toFixed(0)}/100`,          color: rec.corridor_risk_score>60?"#ef4444":rec.corridor_risk_score>30?"#f59e0b":"#10b981" },
+                        { Icon:Clock,       label:"Transit",  val:`${rec.transit_days}d`,                               color:"#8b5cf6" },
                       ].map(({ Icon, label, val, color }) => (
                         <div key={label} style={{ background:"#f8fafc", padding:"7px 8px", borderRadius:7, border:"1px solid #f1f5f9" }}>
                           <div style={{ display:"flex", alignItems:"center", gap:3, fontSize:9, color:"#94a3b8", marginBottom:3 }}>
@@ -448,7 +448,7 @@ export default function ProcurementModule() {
                     <div style={{ fontSize:9, color:"#94a3b8", marginTop:2 }}>Score: {baseline.composite_score.toFixed(3)}</div>
                   </div>
                   <div style={{ display:"flex", gap:10, fontSize:11, color:"#64748b", fontVariantNumeric:"tabular-nums" }}>
-                    <span>${baseline.estimated_cost_usd_per_bbl.toFixed(1)}/bbl</span>
+                    <span>${baseline.estimated_cost_usd_per_bbl.toFixed(2)}/bbl</span>
                     <span>Risk {baseline.corridor_risk_score}</span>
                     <span>{baseline.transit_days}d</span>
                   </div>

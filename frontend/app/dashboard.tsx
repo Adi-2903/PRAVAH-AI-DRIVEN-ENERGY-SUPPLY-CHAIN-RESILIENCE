@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import {
   AlertTriangle, TrendingUp, ChevronRight,
-  Activity, BarChart3, Shield, Anchor, AlertCircle, Zap
+  Activity, BarChart3, Shield, Anchor, AlertCircle, Zap, Printer, FileDown, FileText
 } from 'lucide-react';
 import DataFreshness from './components/data-freshness';
 import { MOCK_RISK_SCORE, CORRIDOR_RISK_DATA, LIVE_SIGNALS } from './lib/mock-data';
-import { exportToPDF } from './lib/export';
+import { exportToPDF, exportToCSV, printReport } from './lib/export';
 
 // Single source of truth: derive the corridor table + feed from mock-data.ts
 // (same data the Citizen and Risk Intelligence views use) so scores never
@@ -170,16 +170,16 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
             </span>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
+            <table className="data-table" style={{ tableLayout: 'auto' }}>
               <thead>
                 <tr>
                   <th>Corridor</th>
                   <th>Risk Score</th>
                   <th style={{ minWidth: 140 }}>Risk Spread</th>
-                  <th>24h Δ</th>
-                  <th>Volatility</th>
-                  <th>Throughput</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>24h Δ</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Volatility</th>
+                  <th style={{ whiteSpace: 'nowrap', minWidth: 110 }}>Throughput</th>
+                  <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -336,23 +336,39 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                 </span>
                 <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
               </button>
+              {/* Export PDF */}
               <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}
                 onClick={() => exportToPDF(
                   'Situation Report',
                   [
-                    { heading: 'Composite Risk Index', content: `Current score: 74/100 (+12 pts vs 7-day average). Alert Level: 3 — Elevated. Primary driver: Strait of Hormuz corridor risk at 82/100 due to Iranian naval activity and AIS dark-shipping anomalies.` },
+                    { heading: 'Composite Risk Index', content: `Current score: 74/100 (+12 pts vs 7-day average). Alert Level 3 — Elevated. Primary driver: Strait of Hormuz corridor risk at 82/100 due to Iranian naval activity and AIS dark-shipping anomalies.` },
                     { heading: 'Key Indicators', content: `Import Dependency: 88% of crude sourced from imports. Hormuz Transit: 42% of Indian crude imports. SPR Cover: 9.5 days (vs IEA 90-day benchmark). Brent Crude: $84.12/bbl (+2.94% 24h).` },
                     { heading: 'Active Alerts', content: `CRITICAL: Iran seizes second tanker in Hormuz within 48h; US Fifth Fleet raises posture. HIGH: Anti-ship missile fired near Bab-el-Mandeb transit zone. ELEVATED: Shipping congestion at South African bunkering ports due to diversion flows.` },
                   ],
-                  {
-                    headers: ['Corridor', 'Risk Score', '24h Change', 'Volatility', 'Throughput'],
-                    rows: riskData.map(r => [r.name, r.score.toFixed(1), r.delta, r.vol, r.barrels]),
-                  },
+                  { headers: ['Corridor', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], rows: riskData.map(r => [r.name, r.score.toFixed(1), r.delta, r.vol, r.barrels]) },
                   MOCK_RISK_SCORE.reasoning_trail
                 )}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Zap style={{ width: 18, height: 18, color: '#eab308' }} /> Export Situation Report
+                  <FileDown style={{ width: 18, height: 18, color: '#eab308' }} /> Export PDF Report
+                </span>
+                <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
+              </button>
+              {/* Export CSV */}
+              <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}
+                onClick={() => exportToCSV('PRAVAH_Corridor_Risk', ['Corridor', 'Short', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], riskData.map(r => [r.name, r.short, r.score.toFixed(1), r.delta, r.vol, r.barrels]))}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <FileText style={{ width: 18, height: 18, color: '#22c55e' }} /> Export CSV Data
+                </span>
+                <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
+              </button>
+              {/* Print */}
+              <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}
+                onClick={() => printReport('Situation Report')}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Printer style={{ width: 18, height: 18, color: '#3b82f6' }} /> Print Report
                 </span>
                 <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
               </button>

@@ -162,9 +162,9 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
   }, []);
 
   const getHeadline = (score: number) => {
-    if (score > 75) return { text: 'elevated risk', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' };
-    if (score > 50) return { text: 'moderate risk', color: '#f97316', bg: 'rgba(249,115,22,0.08)' };
-    if (score > 30) return { text: 'low-moderate risk', color: '#eab308', bg: 'rgba(234,179,8,0.08)' };
+    if (score > 75) return { text: 'critical risk', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' };
+    if (score > 50) return { text: 'high risk', color: '#f97316', bg: 'rgba(249,115,22,0.08)' };
+    if (score > 30) return { text: 'elevated risk', color: '#eab308', bg: 'rgba(234,179,8,0.08)' };
     return { text: 'low risk', color: '#22c55e', bg: 'rgba(34,197,94,0.08)' };
   };
   const headline = getHeadline(risk.score);
@@ -244,7 +244,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
             fontSize: 14, color: 'rgba(148,163,184,0.7)', marginTop: 14,
             lineHeight: 1.8, fontWeight: 500,
           }}>
-            {coord.summary.split('.').slice(0, 2).join('.')}.
+            India sources 42% of crude via the Strait of Hormuz. A critical disruption could push Brent to $96–$112/bbl, adding $14.6B to the annual import bill and raising pump prices by ₹7.7/litre.
           </p>
         </div>
 
