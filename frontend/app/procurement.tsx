@@ -153,7 +153,7 @@ export default function ProcurementModule() {
       setSelectedRec(0);
       setIsOffline(true);
     } finally { setLoading(false); }
-  }, [costWeight, riskWeight, transitWeight]);
+  }, [costWeight, riskWeight, transitWeight, market]);
 
   useEffect(() => { const t = setTimeout(fetchData, 500); return () => clearTimeout(t); }, [fetchData]);
 

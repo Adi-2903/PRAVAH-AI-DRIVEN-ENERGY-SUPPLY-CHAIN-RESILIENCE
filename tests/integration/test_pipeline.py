@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 def step1_risk_score(risk_level=75.0):
     """Simulate what the Risk Agent would produce."""
-    from schemas.risk_score import RiskScoreResponse
+    from shared.contracts.risk_score import RiskScoreResponse
     now = datetime.now(timezone.utc)
     return RiskScoreResponse(
         corridor="hormuz", score=risk_level, confidence=0.87,
@@ -56,7 +56,7 @@ def step2_simulate(risk_response):
 # ── STEP 3: Validate Recommend contract ──────────────────────────────────────
 
 def step3_recommend(scenario_data):
-    from schemas.recommend import RecommendResponse, SupplierRecommendation
+    from shared.contracts.recommend import RecommendResponse, SupplierRecommendation
     now = datetime.now(timezone.utc)
     # Mock procurement agent output using real schema
     recs = [

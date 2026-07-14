@@ -39,6 +39,10 @@ from shared.db.knowledge_graph import build_supply_chain_graph
 def health():
     return {"status": "ok"}
 
+@app.get("/ready")
+def ready():
+    return {"status": "ready"}
+
 @app.get("/system-status")
 def system_status():
     status = {

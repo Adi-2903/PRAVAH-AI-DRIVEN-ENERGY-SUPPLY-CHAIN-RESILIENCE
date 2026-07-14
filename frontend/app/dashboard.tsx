@@ -56,6 +56,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
 
   useEffect(() => {
     const now = new Date();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLiveDate(now.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase());
   }, []);
 
@@ -78,7 +79,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
           Command Center
         </h1>
         <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7, maxWidth: 680, fontWeight: 500 }}>
-          Anticipatory intelligence for India's crude oil supply chain. Composite risk signals aggregated across corridors, suppliers, and market indicators — updated continuously.
+          Anticipatory intelligence for India&apos;s crude oil supply chain. Composite risk signals aggregated across corridors, suppliers, and market indicators — updated continuously.
         </p>
       </div>
 

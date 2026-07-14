@@ -262,7 +262,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
             fontSize: 26, fontWeight: 700, color: '#f1f5f9',
             lineHeight: 1.5, letterSpacing: '-0.01em',
           }}>
-            India's energy supply faces{' '}
+            India&apos;s energy supply faces{' '}
             <span style={{
               color: headline.color,
               padding: '2px 8px', borderRadius: 6,

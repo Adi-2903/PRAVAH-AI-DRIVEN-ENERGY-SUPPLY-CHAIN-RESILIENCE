@@ -5,9 +5,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from models import (
-    SimulateRequest, SimulateResponse, DistributionStats,
-    DailyPriceStats, PumpPriceImpact, GDPImpactPct
+from shared.contracts.simulate import (
+    SimulateRequest,
+    SimulateResponse,
+    DailyPricePoint,
+    PumpPriceImpact,
+    GdpImpactPct,
+    PriceDistribution,
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -72,6 +76,10 @@ app.add_middleware(
 def health():
     return {"status": "ok"}
 
+@app.get("/ready")
+def ready():
+    return {"status": "ready"}
+
 @app.get("/data-status")
 def data_status():
     from data.eia_history_client import get_data_status
@@ -80,22 +88,22 @@ def data_status():
 @app.get("/simulate/mock", response_model=SimulateResponse)
 def simulate_mock():
     return SimulateResponse(
-        brent_price_distribution=DistributionStats(
+        brent_price_distribution=PriceDistribution(
             p10=88.0, p50=96.0, p90=112.0, mean=97.4, std_dev=8.1
         ),
         daily_price_path=[
-            DailyPriceStats(day=1, p10=83.0, p50=85.0, p90=89.0),
-            DailyPriceStats(day=2, p10=84.0, p50=87.0, p90=93.0),
-            DailyPriceStats(day=3, p10=85.0, p50=90.0, p90=98.0),
-            DailyPriceStats(day=4, p10=86.0, p50=92.0, p90=102.0),
-            DailyPriceStats(day=5, p10=88.0, p50=96.0, p90=112.0),
+            DailyPricePoint(day=1, p10=83.0, p50=85.0, p90=89.0),
+            DailyPricePoint(day=2, p10=84.0, p50=87.0, p90=93.0),
+            DailyPricePoint(day=3, p10=85.0, p50=90.0, p90=98.0),
+            DailyPricePoint(day=4, p10=86.0, p50=92.0, p90=102.0),
+            DailyPricePoint(day=5, p10=88.0, p50=96.0, p90=112.0),
         ],
         pump_price_impact=PumpPriceImpact(
             current_inr_per_litre=96.5,
             projected_p50_inr_per_litre=104.2,
             projected_p90_inr_per_litre=111.8
         ),
-        gdp_impact_pct=GDPImpactPct(
+        gdp_impact_pct=GdpImpactPct(
             p10=-0.08, p50=-0.21, p90=-0.41
         ),
         calibration_note="elasticities validated against EIA historical shock: 2022 Ukraine invasion price spike",
@@ -132,7 +140,7 @@ def simulate(req: SimulateRequest, user=Depends(get_current_user)):
     final_prices = paths[:, -1]
     p10, p50, p90 = np.percentile(final_prices, [10, 50, 90])
     
-    brent_dist = DistributionStats(
+    brent_dist = PriceDistribution(
         p10=float(p10),
         p50=float(p50),
         p90=float(p90),
@@ -144,7 +152,7 @@ def simulate(req: SimulateRequest, user=Depends(get_current_user)):
     for t in range(days):
         day_prices = paths[:, t]
         d_p10, d_p50, d_p90 = np.percentile(day_prices, [10, 50, 90])
-        daily_stats.append(DailyPriceStats(
+        daily_stats.append(DailyPricePoint(
             day=t+1,
             p10=float(d_p10),
             p50=float(d_p50),
@@ -177,7 +185,7 @@ def simulate(req: SimulateRequest, user=Depends(get_current_user)):
     gdp_p50 = (brent_pct_change_p50 / 0.1) * gdp_sens
     gdp_p90 = (brent_pct_change_p90 / 0.1) * gdp_sens
     
-    gdp_impact = GDPImpactPct(
+    gdp_impact = GdpImpactPct(
         p10=float(gdp_p10),
         p50=float(gdp_p50),
         p90=float(gdp_p90)

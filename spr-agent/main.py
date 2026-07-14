@@ -11,7 +11,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from shared.schemas.spr_schedule import SPRScheduleRequest, SPRScheduleResponse, DailySchedule  # noqa: E402
+from shared.contracts.spr_schedule import SPRScheduleRequest, SPRScheduleResponse, DailySchedule  # noqa: E402
 from shared.auth import get_current_user  # noqa: E402
 
 app = FastAPI(title="SPR Optimizer Agent")
@@ -31,6 +31,10 @@ def get_risk_weight(score: float) -> float:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/ready")
+def ready():
+    return {"status": "ready"}
 
 @app.post("/spr-schedule", response_model=SPRScheduleResponse)
 def compute_schedule(req: SPRScheduleRequest, user=Depends(get_current_user)):

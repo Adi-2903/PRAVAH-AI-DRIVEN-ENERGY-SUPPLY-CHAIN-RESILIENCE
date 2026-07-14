@@ -16,8 +16,8 @@ import pytest
 
 # ---------------------------------------------------------------------------
 # Path setup
-#   ROOT        -> `from shared.schemas.risk_score import ...` (main.py style)
-#   SHARED      -> `from schemas.risk_score import ...`        (team convention)
+#   ROOT        -> `from shared.contracts.risk_score import ...` (main.py style)
+#   SHARED      -> `from shared.contracts.risk_score import ...`        (team convention)
 #   RISK_AGENT  -> `from graph import ...`, `from scoring... import ...`
 # ---------------------------------------------------------------------------
 HERE = os.path.dirname(os.path.abspath(__file__))

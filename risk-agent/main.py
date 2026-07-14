@@ -22,7 +22,7 @@ load_dotenv(os.path.join(_REPO_ROOT, ".env"))  # shared root .env (Supabase cred
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from shared.schemas.risk_score import RiskScoreRequest, RiskScoreResponse, KeyEvent
+from shared.contracts.risk_score import RiskScoreRequest, RiskScoreResponse, KeyEvent
 from graph import run_pipeline
 
 app = FastAPI(title="Pravah Risk Agent")
@@ -39,6 +39,10 @@ app.add_middleware(
 def health():
     return {"status": "ok"}
 
+@app.get("/ready")
+def ready():
+    return {"status": "ready"}
+
 
 @app.post("/risk-score", response_model=RiskScoreResponse)
 def risk_score(req: RiskScoreRequest) -> RiskScoreResponse:
@@ -48,8 +52,10 @@ def risk_score(req: RiskScoreRequest) -> RiskScoreResponse:
         score=result["score"],
         confidence=result["confidence"],
         alert_level=result["alert_level"],
+        signals=[],
         reasoning_trail=result["reasoning_trail"],
         key_events=[KeyEvent(**k) for k in result["key_events"]],
         computed_at=datetime.now(timezone.utc),
         data_sources=data_sources,
+        model="rule-based pipeline",
     )

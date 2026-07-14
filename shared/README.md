@@ -46,9 +46,9 @@ SUPABASE_SERVICE_KEY=your_service_key_here
 | Backend shell | `uvicorn shared.main:app --reload --port 8000` | `.env` |
 | Health check | `GET http://localhost:8000/health` → `{"status":"ok"}` | shell running |
 | Knowledge graph | `python shared/db/knowledge_graph.py` | `networkx` only |
-| Schema import | `python -c "from shared.schemas.risk_score import RiskScoreResponse"` | `pydantic` (run from repo root) |
+| Schema import | `python -c "from shared.contracts.risk_score import RiskScoreResponse"` | `pydantic` (run from repo root) |
 
-> Run `uvicorn` and the `shared.schemas` import **from the repo root** so the
+> Run `uvicorn` and the `shared.contracts` import **from the repo root** so the
 > `shared` package resolves.
 
 ## Corridor naming — read before touching anything
@@ -72,7 +72,7 @@ A case mismatch between the DB and the graph is a silent join failure.
 | `recommend.py`    | procurement-agent | coordinator, frontend |
 | `spr_schedule.py` | spr-agent         | coordinator, frontend |
 
-Agents import these directly (`from shared.schemas.simulate import SimulateResponse`)
+Agents import these directly (`from shared.contracts.simulate import SimulateResponse`)
 instead of retyping the spec. **Once frozen, do not change any field, type, or range
 without team agreement** — a change here silently breaks every agent at once.
 

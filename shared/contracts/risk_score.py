@@ -11,6 +11,13 @@ class RiskScoreRequest(BaseModel):
     as_of: datetime
 
 
+class RiskSignal(BaseModel):
+    type: str
+    source: str
+    weight: float
+    detail: str
+
+
 class KeyEvent(BaseModel):
     headline: str
     severity: Literal["low", "medium", "high", "critical"]
@@ -22,7 +29,9 @@ class RiskScoreResponse(BaseModel):
     score: float = Field(ge=0.0, le=100.0)
     confidence: float = Field(ge=0.0, le=1.0)
     alert_level: AlertLevel
+    signals: list[RiskSignal] = []
     reasoning_trail: list[str]
     key_events: list[KeyEvent]
     computed_at: datetime
     data_sources: list[str]
+    model: str = "Pravah Risk Engine v1"

@@ -1,5 +1,5 @@
 """Make both this folder and the repo root importable during tests, so
-`from scoring... import` / `from ingestion... import` and `from shared.schemas
+`from scoring... import` / `from ingestion... import` and `from shared.contracts
 ... import` all resolve regardless of the working directory pytest runs from.
 """
 import os

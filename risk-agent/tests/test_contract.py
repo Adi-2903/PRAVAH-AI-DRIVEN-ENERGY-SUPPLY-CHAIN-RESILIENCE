@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 
 from graph import run_pipeline
-from shared.schemas.risk_score import RiskScoreResponse, KeyEvent
+from shared.contracts.risk_score import RiskScoreResponse, KeyEvent
 
 AS_OF = datetime(2026, 7, 11, tzinfo=timezone.utc)
 

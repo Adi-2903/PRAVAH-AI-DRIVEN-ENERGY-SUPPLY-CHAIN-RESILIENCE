@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared")
 
 import pytest
 from datetime import datetime, timezone
-from schemas.risk_score import RiskScoreResponse, KeyEvent
+from shared.contracts.risk_score import RiskScoreResponse, KeyEvent
 
 def make_response(**kwargs):
     now = datetime.now(timezone.utc)

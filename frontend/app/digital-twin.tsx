@@ -215,7 +215,7 @@ export default function DigitalTwin() {
                 const color = getStatusColor(asset.status);
                 const isSelected = selectedAsset?.id === asset.id;
                 return (
-                  <Marker key={asset.id} coordinates={asset.coordinates} onClick={() => setSelectedAsset(asset)} style={{ cursor: 'pointer' }}>
+                  <Marker key={asset.id} coordinates={asset.coordinates} onClick={() => setSelectedAsset(asset)} style={{ default: { cursor: 'pointer' }, hover: { cursor: 'pointer' }, pressed: { cursor: 'pointer' } }}>
                     {isSelected && (
                       <circle cx={0} cy={0} r={12} fill="none" stroke={color} strokeWidth={1} strokeDasharray="2 2" className="animate-spin-slow" />
                     )}
@@ -264,6 +264,7 @@ export default function DigitalTwin() {
       {/* Footer / Telemetry stream */}
       <div style={{ height: 32, background: '#020617', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', padding: '0 24px', fontSize: 10, fontFamily: 'var(--font-mono)', color: '#64748b', gap: 24 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#34d399' }}><CheckCircle2 style={{ width: 12, height: 12 }} /> SECURE CONNECTION</span>
+        {/* eslint-disable-next-line react-hooks/purity */}
         <span>ID: TWIN-{Math.random().toString(36).substring(2,8).toUpperCase()}</span>
         <span>UPTIME: 99.99%</span>
         <span>LAT: 22.34 LON: 69.96</span>

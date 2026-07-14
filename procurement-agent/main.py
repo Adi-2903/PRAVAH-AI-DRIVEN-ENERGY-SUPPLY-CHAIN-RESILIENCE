@@ -13,7 +13,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from shared.schemas.recommend import (  # noqa: E402
+from shared.contracts.recommend import (  # noqa: E402
     RecommendRequest,
     RecommendResponse,
     SupplierRecommendation as RecommendationItem,
@@ -50,16 +50,31 @@ async def fetch_live_market_data() -> dict:
     live = {}
     try:
         async with httpx.AsyncClient(timeout=6.0) as client:
-            # Open exchange rate for USD/INR
-            fx_resp = await client.get(
-                "https://api.exchangerate.host/latest",
-                params={"base": "USD", "symbols": "INR"}
-            )
-            if fx_resp.status_code == 200:
-                data = fx_resp.json()
-                live["usd_inr"] = data.get("rates", {}).get("INR", 83.5)
-    except Exception:
-        pass
+            # Fetch Brent (BZ=F), WTI (CL=F), and USD/INR (INR=X) from Yahoo Finance
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            brent_fut = client.get('https://query1.finance.yahoo.com/v8/finance/chart/BZ=F', headers=headers)
+            wti_fut = client.get('https://query1.finance.yahoo.com/v8/finance/chart/CL=F', headers=headers)
+            fx_fut = client.get('https://query1.finance.yahoo.com/v8/finance/chart/INR=X', headers=headers)
+            natgas_fut = client.get('https://query1.finance.yahoo.com/v8/finance/chart/NG=F', headers=headers)
+            
+            resps = await asyncio.gather(brent_fut, wti_fut, fx_fut, natgas_fut, return_exceptions=True)
+            
+            if not isinstance(resps[0], Exception) and resps[0].status_code == 200:
+                live["brent_usd"] = resps[0].json()['chart']['result'][0]['meta']['regularMarketPrice']
+            if not isinstance(resps[1], Exception) and resps[1].status_code == 200:
+                live["wti_usd"] = resps[1].json()['chart']['result'][0]['meta']['regularMarketPrice']
+            if not isinstance(resps[2], Exception) and resps[2].status_code == 200:
+                live["usd_inr"] = resps[2].json()['chart']['result'][0]['meta']['regularMarketPrice']
+            if not isinstance(resps[3], Exception) and resps[3].status_code == 200:
+                live["nat_gas_usd"] = resps[3].json()['chart']['result'][0]['meta']['regularMarketPrice']
+                
+            # Synthesize Dubai and Oman based on historical Brent spread if not exactly available
+            if "brent_usd" in live:
+                live["dubai_usd"] = round(live["brent_usd"] - 1.22, 2)
+                live["oman_usd"] = round(live["brent_usd"] - 0.97, 2)
+                
+    except Exception as e:
+        print(f"Error fetching live market data: {e}")
 
     # Commodity prices — static fallback enriched with realistic 2025 spot prices
     defaults = {
@@ -67,7 +82,7 @@ async def fetch_live_market_data() -> dict:
         "wti_usd":      80.55,
         "dubai_usd":    82.90,
         "oman_usd":     83.15,
-        "usd_inr":      live.get("usd_inr", 83.42),
+        "usd_inr":      83.42,
         "nat_gas_usd":  2.81,
         # Per-supplier live cost adjustment (basis differential from Brent)
         "SAU_ARAMCO_diff":   -1.72,   # Arab Light OSP
@@ -78,7 +93,7 @@ async def fetch_live_market_data() -> dict:
         "NGA_NNPC_diff":      2.10,   # Bonny Light premium
         "KWT_KPC_diff":      -2.40,   # Kuwait Export Crude
         "MEX_PEMEX_diff":    -6.80,   # Maya heavy discount
-        "data_source": "EIA/OpenExchangeRate fallback",
+        "data_source": "Yahoo Finance (Live)" if len(live) > 0 else "Static Fallback",
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "is_live": len(live) > 0,
     }
@@ -100,8 +115,12 @@ def get_live_cost(market: dict, supplier_id: str, base_cost: float) -> float:
 # ── Health & Diagnostics ────────────────────────────────────────────────────
 @app.get("/health")
 def health():
+    return {"status": "ok"}
+
+@app.get("/ready")
+def ready():
     return {
-        "status": "ok",
+        "status": "ready",
         "graph_nodes": len(G.nodes),
         "graph_edges": len(G.edges),
         "version": "2.0.0"

@@ -53,7 +53,7 @@ def _valid_response_shape(body):
     """Validate against the frozen contract if importable; else structural checks."""
     try:
         sys.path.insert(0, SHARED)
-        from schemas.risk_score import RiskScoreResponse
+        from shared.contracts.risk_score import RiskScoreResponse
         RiskScoreResponse(**body)
         return True, "validates against frozen RiskScoreResponse"
     except ImportError:

@@ -37,7 +37,11 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$projectRoot\
 Write-Host "Starting SPR Agent (Port 8004)..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$projectRoot\spr-agent'; `$env:PYTHONPATH='$projectRoot'; uvicorn main:app --port 8004"
 
-# 5. Start Next.js Frontend
+# 5. Start Coordinator on Port 8005
+Write-Host "Starting Coordinator (Port 8005)..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$projectRoot\coordinator'; `$env:PYTHONPATH='$projectRoot'; uvicorn main:app --port 8005"
+
+# 6. Start Next.js Frontend
 Write-Host "Starting Next.js Frontend (Port 3000)..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$projectRoot\frontend'; npm run dev"
 
@@ -50,4 +54,5 @@ Write-Host " - Risk Agent: http://127.0.0.1:8001"
 Write-Host " - Scenario Engine: http://127.0.0.1:8002"
 Write-Host " - Procurement Agent: http://127.0.0.1:8003"
 Write-Host " - SPR Agent: http://127.0.0.1:8004"
+Write-Host " - Coordinator: http://127.0.0.1:8005"
 Write-Host "====================================================="

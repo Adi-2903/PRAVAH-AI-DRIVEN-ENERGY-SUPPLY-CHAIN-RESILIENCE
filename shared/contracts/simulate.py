@@ -55,5 +55,5 @@ class SimulateResponse(BaseModel):
     calibration_note: str
     num_simulations_run: int
     computed_at: datetime
-    data_source: Literal["live_eia", "fallback_cache"]
+    data_source: Literal["live_eia", "fallback_cache", "live_yahoo"]
     volatility_calibrated_from: str

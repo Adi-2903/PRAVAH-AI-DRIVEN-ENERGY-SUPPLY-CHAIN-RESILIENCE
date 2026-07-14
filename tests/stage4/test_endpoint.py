@@ -58,7 +58,7 @@ def test_risk_score_returns_valid_contract(client, corridor):
 
 def test_response_matches_frozen_schema(client):
     """The serialized response must round-trip through the frozen contract."""
-    from schemas.risk_score import RiskScoreResponse
+    from shared.contracts.risk_score import RiskScoreResponse
     r = client.post("/risk-score", json=_body("hormuz"))
     assert r.status_code == 200
     RiskScoreResponse.model_validate(r.json())   # raises if the contract is broken

@@ -76,7 +76,7 @@ def save_to_cache(data: list[dict]):
 
 def fetch_brent_spot_history(start_date: str, end_date: str) -> list[dict]:
     """
-    Fetches daily Brent crude spot prices from EIA API v2.
+    Fetches daily Brent crude spot prices from Yahoo Finance.
     Checks 6h cache first. If empty/expired/failed, hits API.
     Falls back to local CSV on failure.
     """
@@ -98,65 +98,40 @@ def fetch_brent_spot_history(start_date: str, end_date: str) -> list[dict]:
         filtered = [x for x in cached_data if start_date <= x["date"] <= end_date]
         return sorted(filtered, key=lambda x: x["date"])
     
-    # 2. Try EIA API
-    api_key = os.getenv("EIA_API_KEY", "").strip()
-    if not api_key:
-        logger.warning("EIA_API_KEY environment variable not set. Falling back to CSV.")
-        STATUS["live_working"] = False
-        STATUS["current_source"] = "fallback_cache"
-        
-        fallback = load_fallback_data()
-        STATUS["cached_days_count"] = len(fallback)
-        filtered = [x for x in fallback if start_date <= x["date"] <= end_date]
-        return sorted(filtered, key=lambda x: x["date"])
-    
-    # Try different facet endpoints for RBRTE
-    # URL 1: Using facets[series][]
-    url_series = (
-        f"https://api.eia.gov/v2/petroleum/pri/spt/data/?"
-        f"frequency=daily&data[0]=value&facets[series][]=RBRTE&"
-        f"sort[0][column]=period&sort[0][direction]=desc&length=1000&api_key={api_key}"
-    )
-    # URL 2: Using facets[product][] (as in prompt description)
-    url_product = (
-        f"https://api.eia.gov/v2/petroleum/pri/spt/data/?"
-        f"frequency=daily&data[0]=value&facets[product][]=RBRTE&"
-        f"sort[0][column]=period&sort[0][direction]=desc&length=1000&api_key={api_key}"
-    )
+    # 2. Try Yahoo Finance API
+    url = "https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?range=2y&interval=1d"
     
     raw_data = None
     success = False
     
-    # We will try both URLs to be robust
-    for url in [url_series, url_product]:
-        try:
-            logger.info(f"Attempting to fetch Brent prices from EIA API URL: {url.replace(api_key, 'HIDDEN')}")
-            response = httpx.get(url, timeout=10.0)
-            if response.status_code == 200:
-                json_res = response.json()
-                if "response" in json_res and "data" in json_res["response"]:
-                    raw_data = json_res["response"]["data"]
-                    if raw_data:
-                        success = True
-                        break
-        except Exception as e:
-            logger.warning(f"Error fetching from EIA URL: {e}")
+    try:
+        logger.info(f"Attempting to fetch Brent prices from Yahoo Finance URL: {url}")
+        response = httpx.get(url, timeout=10.0, headers={"User-Agent": "Mozilla/5.0"})
+        if response.status_code == 200:
+            json_res = response.json()
+            if "chart" in json_res and "result" in json_res["chart"] and json_res["chart"]["result"]:
+                result = json_res["chart"]["result"][0]
+                timestamps = result.get("timestamp", [])
+                indicators = result.get("indicators", {})
+                quote = indicators.get("quote", [{}])[0]
+                closes = quote.get("close", [])
+                
+                if timestamps and closes:
+                    success = True
+                    raw_data = {"timestamps": timestamps, "closes": closes}
+    except Exception as e:
+        logger.warning(f"Error fetching from Yahoo URL: {e}")
             
     if success and raw_data:
         parsed_records = []
-        for item in raw_data:
-            period = item.get("period")
-            value = item.get("value")
-            if not period or value is None:
+        for ts, close_val in zip(raw_data["timestamps"], raw_data["closes"]):
+            if close_val is None:
                 continue
-            try:
-                price_usd = float(value)
-                parsed_records.append({
-                    "date": period,
-                    "price_usd": price_usd
-                })
-            except ValueError:
-                continue
+            date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+            parsed_records.append({
+                "date": date_str,
+                "price_usd": float(close_val)
+            })
                 
         if parsed_records:
             # Update cache and status
@@ -164,14 +139,14 @@ def fetch_brent_spot_history(start_date: str, end_date: str) -> list[dict]:
             STATUS["live_working"] = True
             STATUS["last_fetched"] = datetime.now(timezone.utc).isoformat()
             STATUS["cached_days_count"] = len(parsed_records)
-            STATUS["current_source"] = "live_eia"
+            STATUS["current_source"] = "live_yahoo"
             
             # Filter and sort
             filtered = [x for x in parsed_records if start_date <= x["date"] <= end_date]
             return sorted(filtered, key=lambda x: x["date"])
             
     # 3. Fallback on Failure
-    logger.warning("EIA API call failed or returned no data. Falling back to bundled CSV.")
+    logger.warning("Yahoo Finance API call failed or returned no data. Falling back to bundled CSV.")
     STATUS["live_working"] = False
     STATUS["current_source"] = "fallback_cache"
     
