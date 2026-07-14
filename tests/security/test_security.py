@@ -96,7 +96,7 @@ def test_malformed_payload():
     # Sending raw invalid JSON text
     response = client.post(
         "/auth/login",
-        data="this is not valid json",
+        content="this is not valid json",
         headers={"Content-Type": "application/json"}
     )
     # FastAPI typically returns 422 for malformed JSON, sometimes 400

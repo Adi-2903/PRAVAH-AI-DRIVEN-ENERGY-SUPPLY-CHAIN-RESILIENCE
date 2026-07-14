@@ -12,10 +12,17 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-from shared.auth import get_current_user
 
-from models import RecommendRequest, RecommendResponse, RecommendationItem, Baseline, GraphStats, LiveMarketData
-from knowledge_graph.graph_builder import build_procurement_graph, get_grade_compatibility
+from shared.schemas.recommend import (  # noqa: E402
+    RecommendRequest,
+    RecommendResponse,
+    SupplierRecommendation as RecommendationItem,
+    Baseline,
+    GraphStats,
+    LiveMarketData,
+)
+from knowledge_graph.graph_builder import build_procurement_graph, get_grade_compatibility  # type: ignore[import]  # noqa: E402
+from shared.auth import get_current_user  # noqa: E402
 
 app = FastAPI(title="Procurement Agent", version="2.0.0")
 
@@ -260,10 +267,10 @@ async def recommend(req: RecommendRequest, user=Depends(get_current_user)):
     # ── Score baseline ────────────────────────────────────────────────────────
     b_score = composite(baseline_cand)
     baseline_out = Baseline(
-        supplier=baseline_cand["supplier"],
-        estimated_cost_usd_per_bbl=baseline_cand["estimated_cost_usd_per_bbl"],
-        transit_days=baseline_cand["transit_days"],
-        corridor_risk_score=baseline_cand["corridor_risk_score"],
+        supplier=str(baseline_cand["supplier"]),
+        estimated_cost_usd_per_bbl=float(baseline_cand["estimated_cost_usd_per_bbl"]),
+        transit_days=int(baseline_cand["transit_days"]),
+        corridor_risk_score=float(baseline_cand["corridor_risk_score"]),
         composite_score=b_score,
     )
 

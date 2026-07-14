@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 import numpy as np
 from scipy.optimize import linprog
 
-from models import SPRScheduleRequest, SPRScheduleResponse, DailySchedule
-
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-from shared.auth import get_current_user
+
+from shared.schemas.spr_schedule import SPRScheduleRequest, SPRScheduleResponse, DailySchedule  # noqa: E402
+from shared.auth import get_current_user  # noqa: E402
 
 app = FastAPI(title="SPR Optimizer Agent")
 
@@ -126,11 +126,11 @@ def compute_schedule(req: SPRScheduleRequest, user=Depends(get_current_user)):
     return SPRScheduleResponse(
         schedule=schedule,
         total_drawdown_days=round(float(np.sum(opt_drawdowns)), 3),
-        baseline_cost_usd=round(baseline_cost, 2),
-        optimized_cost_usd=round(optimized_cost, 2),
-        savings_usd=round(savings, 2),
-        savings_pct=round(savings_pct, 2),
-        reserve_never_below_floor=bool(current_res >= req.min_safety_floor_days - 1e-5),
+        baseline_cost_usd=float(round(baseline_cost, 2)),
+        optimized_cost_usd=float(round(optimized_cost, 2)),
+        savings_usd=float(round(savings, 2)),
+        savings_pct=float(round(savings_pct, 2)),
+        reserve_never_below_floor=current_res >= req.min_safety_floor_days - 1e-5,
         computed_at=datetime.now(timezone.utc).isoformat() + "Z"
     )
 

@@ -4,6 +4,7 @@ import time
 import csv
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 import httpx
 
 logger = logging.getLogger("eia_history_client")
@@ -15,7 +16,7 @@ CACHE_FILE = os.path.join(DATA_DIR, "eia_cache.json")
 FALLBACK_FILE = os.path.join(DATA_DIR, "fallback_brent_history.csv")
 
 # Global status tracking
-STATUS = {
+STATUS: dict[str, object] = {
     "live_working": False,
     "last_fetched": None,
     "cached_days_count": 0,

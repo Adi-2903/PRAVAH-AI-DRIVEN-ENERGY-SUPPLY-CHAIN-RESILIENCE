@@ -1,8 +1,10 @@
 # shared/main.py
 import os
+from typing import Any, cast
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from supabase import create_client
+from postgrest import CountMethod
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -53,16 +55,17 @@ def system_status():
             res = supabase.table("data_sources").select("*").execute()
             if res.data:
                 for row in res.data:
-                    name = row["name"].replace("_api", "")
+                    row_dict = cast(dict[str, Any], row)
+                    name = str(row_dict["name"]).replace("_api", "")
                     status["data_sources"][name] = {
-                        "status": "live" if row.get("is_live") else "fallback",
-                        "last_synced_at": row.get("last_synced")
+                        "status": "live" if row_dict.get("is_live") else "fallback",
+                        "last_synced_at": row_dict.get("last_synced")
                     }
             
             # Row counts
             for table in ["suppliers", "corridors", "refineries", "ships", "risk_events"]:
                 try:
-                    res_count = supabase.table(table).select("*", count="exact").limit(1).execute()
+                    res_count = supabase.table(table).select("*", count=CountMethod.exact).limit(1).execute()
                     status["database"]["row_counts"][table] = res_count.count
                 except:
                     status["database"]["row_counts"][table] = 0
@@ -84,7 +87,7 @@ def system_status():
             "built_from_db": status["database"]["connected"],
             "nodes": G.number_of_nodes(),
             "edges": G.number_of_edges(),
-            "last_built_at": datetime.now().isoformat() + "Z"
+            "last_built_at": datetime.now().isoformat() + "Z"  # type: ignore[typeddict-item]
         }
     except Exception as e:
         print("Graph build error:", e)
@@ -107,8 +110,11 @@ def signup(payload: SignupRequest):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase is not configured on this instance.")
     try:
-        result = supabase.auth.sign_up({"email": payload.email, "password": payload.password})
-        return {"user_id": result.user.id, "email": result.user.email}
+        result = supabase.auth.sign_up({"email": payload.email, "password": payload.password})  # type: ignore[arg-type]
+        user = result.user
+        if user is None:
+            raise HTTPException(status_code=400, detail="Sign-up failed: no user returned")
+        return {"user_id": user.id, "email": user.email}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -119,8 +125,12 @@ def login(payload: LoginRequest):
         raise HTTPException(status_code=500, detail="Supabase is not configured on this instance.")
     try:
         result = supabase.auth.sign_in_with_password(
-            {"email": payload.email, "password": payload.password}
+            {"email": payload.email, "password": payload.password}  # type: ignore[arg-type]
         )
-        return {"access_token": result.session.access_token, "user_id": result.user.id}
+        session = result.session
+        user = result.user
+        if session is None or user is None:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        return {"access_token": session.access_token, "user_id": user.id}
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid credentials")

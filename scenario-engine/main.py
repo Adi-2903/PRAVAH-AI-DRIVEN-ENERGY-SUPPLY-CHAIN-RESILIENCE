@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,33 +14,23 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-from shared.auth import get_current_user
-
-app = FastAPI(title="Scenario Engine")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # wildcard origin + credentials=True is rejected by browsers
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+from shared.auth import get_current_user  # noqa: E402
 
 CALIBRATED_VOLATILITY = 0.02
 CALIBRATION_RANGE = "unknown"
 DATA_SOURCE = "fallback_cache"
 
-@app.on_event("startup")
-def calibrate_volatility():
+
+def _run_calibration():
     global CALIBRATED_VOLATILITY, CALIBRATION_RANGE, DATA_SOURCE
     from datetime import date, timedelta
     from data.eia_history_client import fetch_brent_spot_history, get_data_status
-    
+
     end_date = date.today()
     start_date = end_date - timedelta(days=24 * 30.5)
     start_date_str = start_date.strftime("%Y-%m-%d")
     end_date_str = end_date.strftime("%Y-%m-%d")
-    
+
     try:
         history = fetch_brent_spot_history(start_date_str, end_date_str)
         if len(history) > 1:
@@ -49,16 +40,33 @@ def calibrate_volatility():
                 CALIBRATED_VOLATILITY = float(np.std(log_returns))
                 CALIBRATION_RANGE = f"{history[0]['date']} to {history[-1]['date']}"
                 status = get_data_status()
-                DATA_SOURCE = status.get("current_source", "fallback_cache")
+                DATA_SOURCE = str(status.get("current_source", "fallback_cache"))
                 print(f"[CALIBRATION] Calibrated volatility on startup: {CALIBRATED_VOLATILITY:.6f} ({CALIBRATION_RANGE}) via {DATA_SOURCE}")
                 return
     except Exception as e:
         print(f"[CALIBRATION] Error during startup calibration: {e}")
-        
+
     CALIBRATED_VOLATILITY = 0.02
     CALIBRATION_RANGE = f"{start_date_str} to {end_date_str} (fallback defaults)"
     DATA_SOURCE = "fallback_cache"
     print(f"[CALIBRATION] Fallback calibration used: {CALIBRATED_VOLATILITY:.6f} ({CALIBRATION_RANGE})")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _run_calibration()
+    yield
+
+
+app = FastAPI(title="Scenario Engine", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,  # wildcard origin + credentials=True is rejected by browsers
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health")
 def health():
