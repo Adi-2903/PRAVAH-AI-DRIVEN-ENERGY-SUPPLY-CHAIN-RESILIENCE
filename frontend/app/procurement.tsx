@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { ComposableMap, Geographies, Geography, Marker, Line } from "react-simple-maps";
+import { ComposableMap, Geographies, Geography, Marker, Line, ZoomableGroup } from "react-simple-maps";
 import { ArrowDown, ArrowUp, Zap, ShieldAlert, Clock, RefreshCw, ChevronRight, ChevronLeft, Wifi, WifiOff, Trophy, Medal, Award, FileDown } from "lucide-react";
 import { exportProcurementReport } from './lib/export';
 import { serviceUrl, postJSON } from './lib/api';
@@ -131,6 +131,7 @@ export default function ProcurementModule() {
           risk_weight: riskWeight,
           transit_time_weight: transitWeight,
           max_alternatives: 5,
+          market_data: market || undefined
         });
       setRecs(data.recommendations || []);
       setBaseline(data.current_supplier_baseline);
@@ -238,49 +239,51 @@ export default function ProcurementModule() {
       {/* CENTER: Map */}
       <div style={{ flex:1, position:"relative", overflow:"hidden", background:"#eef0f6" }}>
         <div style={{ position:"absolute", inset:0 }}>
-          <ComposableMap projection="geoMercator" projectionConfig={{ center:[63,22], scale:380 }} style={{ width:"100%", height:"100%" }}>
-            <Geographies geography={GEO_URL}>
-              {({ geographies }) => geographies.map(geo => (
-                <Geography key={geo.rsmKey} geography={geo}
-                  style={{ default:{ fill:"#dde3ec", stroke:"#bcc5d3", strokeWidth:0.5, outline:"none" },
-                           hover:{ fill:"#dde3ec", outline:"none" }, pressed:{ fill:"#dde3ec", outline:"none" } }}/>
-              ))}
-            </Geographies>
-
-            {/* Baseline path */}
-            {basePath.map(([f,t], i) => {
-              const fc=NODE_COORDS[f], tc=NODE_COORDS[t];
-              return fc&&tc ? <Line key={`b${i}`} from={fc} to={tc} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5,4"/> : null;
-            })}
-
-            {/* Recommended path */}
-            {recPath.map(([f,t], i) => {
-              const fc=NODE_COORDS[f], tc=NODE_COORDS[t];
-              return fc&&tc ? <Line key={`r${i}`} from={fc} to={tc} stroke="#2563eb" strokeWidth={3} strokeLinecap="round"/> : null;
-            })}
-
-            {/* Markers */}
-            {Object.keys(NODE_COORDS).map(id => {
-              const coords = NODE_COORDS[id];
-              const isRec  = recSet.has(id);
-              const isBase = baseSet.has(id);
-              const r    = isRec ? 7 : isBase ? 5 : 3;
-              const fill = isRec ? "#2563eb" : isBase ? "#94a3b8" : "#cbd5e1";
-              const stroke = isRec ? "#93c5fd" : "#e2e8f0";
-              const label = NODE_LABELS[id] || ROUTE_LABELS[id];
-              return (
-                <Marker key={id} coordinates={coords}>
-                  <circle r={r} fill={fill} stroke={stroke} strokeWidth={1.5}
-                    style={{ filter: isRec ? "drop-shadow(0 0 6px #3b82f6)" : "none" }}/>
-                  {(isRec || isBase) && label && (
-                    <text textAnchor="middle" y={r+11}
-                      style={{ fontSize: isRec?10:9, fill: isRec?"#1e40af":"#64748b", fontWeight: isRec?700:500, pointerEvents:"none", fontFamily:"Inter,sans-serif" }}>
-                      {label}
-                    </text>
-                  )}
-                </Marker>
-              );
-            })}
+          <ComposableMap projection="geoMercator" projectionConfig={{ scale:150 }} style={{ width:"100%", height:"100%" }}>
+            <ZoomableGroup center={[20, 20]} zoom={1.2}>
+              <Geographies geography={GEO_URL}>
+                {({ geographies }) => geographies.map(geo => (
+                  <Geography key={geo.rsmKey} geography={geo}
+                    style={{ default:{ fill:"#dde3ec", stroke:"#94a3b8", strokeWidth:1.5, outline:"none" },
+                             hover:{ fill:"#cbd5e1", outline:"none" }, pressed:{ fill:"#cbd5e1", outline:"none" } }}/>
+                ))}
+              </Geographies>
+  
+              {/* Baseline path */}
+              {basePath.map(([f,t], i) => {
+                const fc=NODE_COORDS[f], tc=NODE_COORDS[t];
+                return fc&&tc ? <Line key={`b${i}`} from={fc} to={tc} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5,4"/> : null;
+              })}
+  
+              {/* Recommended path */}
+              {recPath.map(([f,t], i) => {
+                const fc=NODE_COORDS[f], tc=NODE_COORDS[t];
+                return fc&&tc ? <Line key={`r${i}`} from={fc} to={tc} stroke="#2563eb" strokeWidth={3} strokeLinecap="round"/> : null;
+              })}
+  
+              {/* Markers */}
+              {Object.keys(NODE_COORDS).map(id => {
+                const coords = NODE_COORDS[id];
+                const isRec  = recSet.has(id);
+                const isBase = baseSet.has(id);
+                const r    = isRec ? 7 : isBase ? 5 : 3;
+                const fill = isRec ? "#2563eb" : isBase ? "#94a3b8" : "#cbd5e1";
+                const stroke = isRec ? "#93c5fd" : "#e2e8f0";
+                const label = NODE_LABELS[id] || ROUTE_LABELS[id];
+                return (
+                  <Marker key={id} coordinates={coords}>
+                    <circle r={r} fill={fill} stroke={stroke} strokeWidth={1.5}
+                      style={{ filter: isRec ? "drop-shadow(0 0 6px #3b82f6)" : "none" }}/>
+                    {(isRec || isBase) && label && (
+                      <text textAnchor="middle" y={r+11}
+                        style={{ fontSize: isRec?10:9, fill: isRec?"#1e40af":"#64748b", fontWeight: isRec?700:500, pointerEvents:"none", fontFamily:"Inter,sans-serif" }}>
+                        {label}
+                      </text>
+                    )}
+                  </Marker>
+                );
+              })}
+            </ZoomableGroup>
           </ComposableMap>
         </div>
 
@@ -306,7 +309,7 @@ export default function ProcurementModule() {
             </div>
             <div style={{ display:"flex", gap:14 }}>
               {[
-                { label:"Cost/bbl Δ", val:delta("estimated_cost_usd_per_bbl"), fmt:(v:number)=>`${v<0?'-':'+'}$${Math.abs(v).toFixed(2)}` },
+                { label:"Cost/bbl Δ", val:delta("estimated_cost_usd_per_bbl") * (market?.usd_inr || 83.42), fmt:(v:number)=>`${v<0?'-':'+'}₹${Math.abs(v).toFixed(2)}` },
                 { label:"Risk Δ",     val:delta("corridor_risk_score"),         fmt:(v:number)=>`${v<0?'-':'+'}${Math.abs(v).toFixed(0)} pts` },
                 { label:"Transit Δ",  val:delta("transit_days"),                fmt:(v:number)=>`${v<0?'-':'+'}${Math.abs(v)}d` },
               ].map(({ label, val, fmt }) => (
@@ -414,7 +417,7 @@ export default function ProcurementModule() {
                     {/* Metrics grid */}
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom:10 }}>
                       {[
-                        { Icon:Zap,         label:"Cost/bbl", val:`$${rec.estimated_cost_usd_per_bbl.toFixed(2)}/bbl`, color:"#3b82f6" },
+                        { Icon:Zap,         label:"Cost/bbl", val:`₹${(rec.estimated_cost_usd_per_bbl * (market?.usd_inr || 83.42)).toFixed(2)}/bbl`, color:"#3b82f6" },
                         { Icon:ShieldAlert, label:"Risk",     val:`${rec.corridor_risk_score.toFixed(0)}/100`,          color: rec.corridor_risk_score>60?"#ef4444":rec.corridor_risk_score>30?"#f59e0b":"#10b981" },
                         { Icon:Clock,       label:"Transit",  val:`${rec.transit_days}d`,                               color:"#8b5cf6" },
                       ].map(({ Icon, label, val, color }) => (
@@ -446,7 +449,7 @@ export default function ProcurementModule() {
                     <div style={{ fontSize:9, color:"#94a3b8", marginTop:2 }}>Score: {baseline.composite_score.toFixed(3)}</div>
                   </div>
                   <div style={{ display:"flex", gap:10, fontSize:11, color:"#64748b", fontVariantNumeric:"tabular-nums" }}>
-                    <span>${baseline.estimated_cost_usd_per_bbl.toFixed(2)}/bbl</span>
+                    <span>₹{(baseline.estimated_cost_usd_per_bbl * (market?.usd_inr || 83.42)).toFixed(2)}/bbl</span>
                     <span>Risk {baseline.corridor_risk_score}</span>
                     <span>{baseline.transit_days}d</span>
                   </div>

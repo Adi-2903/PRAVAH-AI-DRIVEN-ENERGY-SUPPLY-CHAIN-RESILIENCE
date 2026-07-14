@@ -90,7 +90,7 @@ const CustomFanTooltip = ({ active, payload, label }: any) => {
         return entry ? (
           <div key={key} className="flex justify-between gap-6 py-1">
             <span style={{ color }} className="font-medium">{l}</span>
-            <span className="font-mono font-bold text-gray-900">${entry.value?.toFixed(2)}</span>
+            <span className="font-mono font-bold text-gray-900">₹{(entry.value * 83.42).toFixed(2)}</span>
           </div>
         ) : null;
       })}
@@ -308,7 +308,7 @@ export default function ScenarioSimulator() {
               <SliderRow label="Risk Score" tooltip="Higher score increases both drift and volatility." min={0} max={100} step={1} value={riskScore} onChange={setRiskScore} />
               <SliderRow label="Shock Duration" tooltip="How many days the supply disruption is modelled to last." min={5} max={90} step={1} value={days} onChange={setDays} format={v => `${v} days`} />
               <SliderRow label="Monte Carlo Runs" min={1000} max={20000} step={1000} value={sims} onChange={setSims} format={v => v.toLocaleString()} />
-              <SliderRow label="Current Brent (USD)" min={50} max={150} step={0.5} value={brent} onChange={setBrent} format={v => `$${v.toFixed(1)}`} />
+              <SliderRow label="Current Brent" min={50} max={150} step={0.5} value={brent} onChange={setBrent} format={v => `₹${(v * 83.42).toFixed(1)}`} />
             </div>
           </div>
 
@@ -329,9 +329,9 @@ export default function ScenarioSimulator() {
               </div>
               <div style={{ padding: 24 }}>
                 {[
-                  { label: 'Median Brent (P50)', val: `$${result.brent_price_distribution.p50.toFixed(2)}`, color: '#60a5fa' },
-                  { label: 'Worst Case (P90)', val: `$${result.brent_price_distribution.p90.toFixed(2)}`, color: '#f87171' },
-                  { label: 'Std Deviation', val: `±$${result.brent_price_distribution.std_dev.toFixed(2)}`, color: '#94a3b8' },
+                  { label: 'Median Brent (P50)', val: `₹${(result.brent_price_distribution.p50 * 83.42).toFixed(2)}`, color: '#60a5fa' },
+                  { label: 'Worst Case (P90)', val: `₹${(result.brent_price_distribution.p90 * 83.42).toFixed(2)}`, color: '#f87171' },
+                  { label: 'Std Deviation', val: `±₹${(result.brent_price_distribution.std_dev * 83.42).toFixed(2)}`, color: '#94a3b8' },
                   { label: 'Pump Price Δ (P50)', val: `+₹${pumpDelta.toFixed(2)}/L`, color: pumpDelta > 0 ? '#f87171' : '#4ade80' },
                   { label: 'GDP Impact (P50)', val: `${result.gdp_impact_pct.p50.toFixed(3)}%`, color: '#fbbf24' },
                 ].map((k, i) => (
@@ -356,7 +356,7 @@ export default function ScenarioSimulator() {
           <div className="card" style={{ position: 'relative' }}>
             <div className="card-header">
               <div>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>Projected Brent Crude Path (USD/bbl)</h2>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>Projected Brent Crude Path (INR/bbl)</h2>
                 <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
                   {sims.toLocaleString()} Monte Carlo paths · {days}-day projection horizon
                 </div>
@@ -380,10 +380,10 @@ export default function ScenarioSimulator() {
                     </defs>
                     <CartesianGrid strokeDasharray="4 4" stroke="rgba(0,0,0,0.04)" vertical={false} />
                     <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} tickLine={false} tickMargin={10} />
-                    <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'var(--font-mono)', fontWeight: 600 }} tickLine={false} tickFormatter={v => `$${v}`} width={50} tickMargin={10} />
+                    <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'var(--font-mono)', fontWeight: 600 }} tickLine={false} tickFormatter={v => `₹${(v * 83.42).toFixed(0)}`} width={50} tickMargin={10} />
                     <Tooltip content={<CustomFanTooltip />} />
                     <ReferenceLine y={brent} stroke="#64748b" strokeDasharray="5 5" strokeWidth={1.5}
-                      label={{ value: `Spot: $${brent}`, position: 'insideTopLeft', fontSize: 11, fill: '#64748b', fontWeight: 'bold' }} />
+                      label={{ value: `Spot: ₹${(brent * 83.42).toFixed(2)}`, position: 'insideTopLeft', fontSize: 11, fill: '#64748b', fontWeight: 'bold' }} />
                     <Area type="monotone" dataKey="p90" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 3" fill="url(#bandGrad)" fillOpacity={1} dot={false} />
                     <Area type="monotone" dataKey="p10" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="5 3" fill="#ffffff" fillOpacity={1} dot={false} />
                     <Area type="monotone" dataKey="p50" stroke="#3b82f6" strokeWidth={3} fill="none" dot={false} activeDot={{ r: 5, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} />
@@ -469,7 +469,7 @@ export default function ScenarioSimulator() {
                       <YAxis hide />
                       <Tooltip cursor={{ fill: 'rgba(0,0,0,0.02)' }} contentStyle={{ fontSize: 12, border: '1px solid rgba(0,0,0,0.07)', borderRadius: 12 }}
                         formatter={(v: any) => [Number(v).toFixed(1), 'Density']}
-                        labelFormatter={l => `$${l}/bbl`} />
+                        labelFormatter={l => `₹${(Number(l) * 83.42).toFixed(2)}/bbl`} />
                       <Bar dataKey="f" fill="#3b82f6" fillOpacity={0.8} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>

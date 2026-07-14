@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { Shield, TrendingUp, Fuel, Clock, ChevronRight, Activity } from 'lucide-react';
+import { ComposableMap, Geographies, Geography, Marker, Line as RSMLine, ZoomableGroup } from 'react-simple-maps';
 import { MOCK_RISK_SCORE, MOCK_COORDINATOR, CORRIDOR_RISK_DATA } from './lib/mock-data';
 import DataFreshness from './components/data-freshness';
+
+const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 /* ─── Animated Risk Gauge ──────────────────────── */
 function RiskGauge({ score, size = 220 }: { score: number; size?: number }) {
@@ -91,59 +94,88 @@ function RiskGauge({ score, size = 220 }: { score: number; size?: number }) {
   );
 }
 
-/* ─── Simplified Map ──────────────────────────── */
 function SimpleMap() {
   const corridors = CORRIDOR_RISK_DATA;
   const getColor = (s: number) => s > 70 ? '#ef4444' : s > 40 ? '#f97316' : '#22c55e';
 
-  const points: { label: string; x: number; y: number; score: number }[] = [
-    { label: 'Hormuz', x: 274, y: 126, score: corridors[0].score },
-    { label: 'Red Sea', x: 175, y: 152, score: corridors[1].score },
-    { label: 'Suez', x: 155, y: 110, score: corridors[2].score },
-    { label: 'Cape', x: 138, y: 320, score: corridors[3].score },
-    { label: 'Malacca', x: 553, y: 248, score: corridors[4].score },
+  const points: { label: string; coordinates: [number, number]; score: number }[] = [
+    { label: 'Hormuz', coordinates: [56.5, 26.5], score: corridors[0].score },
+    { label: 'Red Sea', coordinates: [38.0, 20.0], score: corridors[1].score },
+    { label: 'Suez', coordinates: [32.5, 29.9], score: corridors[2].score },
+    { label: 'Cape', coordinates: [20.0, -35.0], score: corridors[3].score },
+    { label: 'Malacca', coordinates: [100.0, 4.0], score: corridors[4].score },
   ];
+
+  const INDIA_COORDS: [number, number] = [78.9629, 20.5937];
 
   return (
     <div style={{
-      borderRadius: 16, overflow: 'hidden',
+      borderRadius: 16, overflow: 'hidden', height: 400, width: '100%',
       background: 'linear-gradient(160deg, rgba(30,41,59,0.8) 0%, rgba(15,23,42,0.9) 100%)',
-      border: '1px solid rgba(255,255,255,0.06)',
-      padding: 16,
+      border: '2px solid rgba(255,255,255,0.1)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      position: 'relative'
     }}>
-      <svg viewBox="0 0 700 380" style={{ width: '100%', maxHeight: 280 }} fill="none">
-        {/* Continents — simplified */}
-        <path d="M 55,130 Q 80,120 100,145 T 120,230 T 128,330 Q 148,360 138,370 T 108,330 T 78,250 T 40,185 Z" fill="rgba(148,163,184,0.15)" stroke="rgba(148,163,184,0.25)" strokeWidth="0.8" />
-        <path d="M 125,110 Q 148,90 192,82 T 272,96 T 298,130 T 270,190 T 205,200 T 132,158 Z" fill="rgba(148,163,184,0.15)" stroke="rgba(148,163,184,0.25)" strokeWidth="0.8" />
-        <path d="M 332,76 Q 375,66 408,88 T 456,132 T 426,205 Q 406,232 395,252 T 363,192 T 322,122 Z" fill="rgba(96,165,250,0.12)" stroke="rgba(96,165,250,0.3)" strokeWidth="1" />
-        <path d="M 468,128 Q 508,140 538,172 T 568,232 T 588,270 Q 568,280 538,252 Z" fill="rgba(148,163,184,0.15)" stroke="rgba(148,163,184,0.25)" strokeWidth="0.8" />
+      <ComposableMap projection="geoMercator" projectionConfig={{ scale: 150 }} style={{ width: '100%', height: '100%' }}>
+        <ZoomableGroup center={[20, 20]} zoom={1.2}>
+          <Geographies geography={GEO_URL}>
+            {({ geographies }) =>
+              geographies.map((geo) => (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  fill="rgba(148,163,184,0.15)"
+                  stroke="rgba(148,163,184,0.5)"
+                  strokeWidth={1.5}
+                  style={{
+                    default: { outline: 'none' },
+                    hover: { fill: "rgba(148,163,184,0.25)", outline: 'none' },
+                    pressed: { outline: 'none' },
+                  }}
+                />
+              ))
+            }
+          </Geographies>
 
-        {/* Sea lanes to India */}
-        <path d="M 138,340 Q 230,305 385,205" stroke="rgba(34,197,94,0.4)" strokeWidth="1.5" strokeDasharray="4 3" />
-        <path d="M 175,152 Q 248,162 385,205" stroke="rgba(249,115,22,0.5)" strokeWidth="2" strokeDasharray="4 3" />
-        <path d="M 275,126 Q 326,155 385,205" stroke="rgba(239,68,68,0.6)" strokeWidth="2.5" strokeDasharray="4 3" />
-        <path d="M 553,248 Q 465,232 385,205" stroke="rgba(34,197,94,0.4)" strokeWidth="1.5" strokeDasharray="4 3" />
+          {/* Lines to India */}
+          {points.map(p => (
+            <RSMLine
+              key={`line-${p.label}`}
+              from={p.coordinates}
+              to={INDIA_COORDS}
+              stroke={getColor(p.score)}
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              style={{ opacity: 0.6 }}
+            />
+          ))}
 
-        {/* India marker */}
-        <circle cx="385" cy="205" r="6" fill="#3b82f6" opacity="0.9" />
-        <circle cx="385" cy="205" r="14" stroke="#3b82f6" strokeWidth="1" fill="none" opacity="0.3" />
+          {/* India Marker */}
+          <Marker coordinates={INDIA_COORDS}>
+            <circle r={6} fill="#3b82f6" opacity={0.9} />
+            <circle r={14} stroke="#3b82f6" strokeWidth={1} fill="none" opacity={0.3} />
+          </Marker>
 
-        {/* Chokepoint markers */}
-        {points.map(p => {
-          const c = getColor(p.score);
-          return (
-            <g key={p.label}>
-              <circle cx={p.x} cy={p.y} r={p.score > 70 ? 7 : 5} fill={c} opacity="0.9" />
-              {p.score > 60 && (
-                <circle cx={p.x} cy={p.y} r={14} stroke={c} strokeWidth="1" fill="none" opacity="0.35" className="pulse-dot" />
-              )}
-              <text x={p.x + 12} y={p.y + 4} fill={c} fontSize="9" fontWeight="bold" fontFamily="sans-serif" opacity="0.9">
-                {p.label} · {p.score}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+          {/* Chokepoints */}
+          {points.map(p => {
+            const c = getColor(p.score);
+            return (
+              <Marker key={p.label} coordinates={p.coordinates}>
+                <circle r={p.score > 70 ? 7 : 5} fill={c} opacity={0.9} />
+                {p.score > 60 && (
+                  <circle r={14} stroke={c} strokeWidth={1} fill="none" opacity={0.35} className="pulse-dot" />
+                )}
+                <text x={12} y={4} fill={c} fontSize={9} fontWeight="bold" fontFamily="sans-serif" opacity={0.9}>
+                  {p.label} · {p.score}
+                </text>
+              </Marker>
+            );
+          })}
+        </ZoomableGroup>
+      </ComposableMap>
+      <div style={{ position: 'absolute', top: 16, left: 16, fontSize: 11, fontWeight: 800, color: '#f8fafc', letterSpacing: '0.1em', textTransform: 'uppercase', background: 'rgba(0,0,0,0.5)', padding: '6px 12px', borderRadius: 8, backdropFilter: 'blur(4px)' }}>
+        Global Risk Corridors
+      </div>
     </div>
   );
 }
@@ -244,7 +276,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
             fontSize: 14, color: 'rgba(148,163,184,0.7)', marginTop: 14,
             lineHeight: 1.8, fontWeight: 500,
           }}>
-            India sources 42% of crude via the Strait of Hormuz. A critical disruption could push Brent to $96–$112/bbl, adding $14.6B to the annual import bill and raising pump prices by ₹7.7/litre.
+            India sources 42% of crude via the Strait of Hormuz. A critical disruption could push Brent to ₹8,008–₹9,343/bbl, adding ₹1.2 Lakh Cr to the annual import bill and raising pump prices by ₹7.7/litre.
           </p>
         </div>
 
@@ -259,10 +291,10 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
           width: '100%', marginBottom: 40, animationDelay: '0.45s',
         }}>
           {[
-            { icon: TrendingUp, label: 'Brent Crude', value: '$84.12', sub: '+6.1% 24h', color: '#ef4444' },
+            { icon: TrendingUp, label: 'Brent Crude', value: `₹${(84.12 * 83.42).toFixed(2)}`, sub: '+6.1% 24h', color: '#ef4444' },
             { icon: Fuel, label: 'Import Dependency', value: '88%', sub: 'Crude oil', color: '#3b82f6' },
             { icon: Shield, label: 'SPR Cover', value: '9.5 days', sub: 'vs 90-day IEA', color: '#eab308' },
-            { icon: Activity, label: 'Import Bill', value: '$137B', sub: 'FY 2024-25', color: '#8b5cf6' },
+            { icon: Activity, label: 'Import Bill', value: `₹${((137 * 83.42) / 10).toFixed(1)}L Cr`, sub: 'FY 2024-25', color: '#8b5cf6' },
           ].map(kpi => {
             const Icon = kpi.icon;
             return (

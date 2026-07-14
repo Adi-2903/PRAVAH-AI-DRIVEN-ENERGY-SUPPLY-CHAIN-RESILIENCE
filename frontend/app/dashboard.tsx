@@ -8,6 +8,7 @@ import {
 import DataFreshness from './components/data-freshness';
 import { MOCK_RISK_SCORE, CORRIDOR_RISK_DATA, LIVE_SIGNALS } from './lib/mock-data';
 import { exportToPDF, exportToCSV, printReport } from './lib/export';
+import { postJSON } from './lib/api';
 
 // Single source of truth: derive the corridor table + feed from mock-data.ts
 // (same data the Citizen and Risk Intelligence views use) so scores never
@@ -31,6 +32,27 @@ function RiskBar({ score }: { score: number }) {
 export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const [liveDate, setLiveDate] = useState('');
   const [selectedFeed, setSelectedFeed] = useState<number | null>(null);
+  const [riskDataState, setRiskDataState] = useState(() => riskData);
+
+  useEffect(() => {
+    async function fetchRiskData() {
+      try {
+        const promises = riskData.map(async (corridor) => {
+          try {
+            const result = await postJSON<any>('risk', '/risk-score', { corridor: corridor.name });
+            return { ...corridor, score: result.score };
+          } catch (e) {
+            return corridor; // fallback to mock
+          }
+        });
+        const newRiskData = await Promise.all(promises);
+        setRiskDataState(newRiskData);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    fetchRiskData();
+  }, []);
 
   useEffect(() => {
     const now = new Date();
@@ -183,7 +205,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                 </tr>
               </thead>
               <tbody>
-                {riskData.map(row => (
+                {riskDataState.map(row => (
                   <tr key={row.name} onClick={() => onNavigate?.('simulator')} style={{ cursor: 'pointer' }}>
                     <td>
                       <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{row.name}</div>
@@ -342,10 +364,10 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                   'Situation Report',
                   [
                     { heading: 'Composite Risk Index', content: `Current score: 74/100 (+12 pts vs 7-day average). Alert Level 3 — Elevated. Primary driver: Strait of Hormuz corridor risk at 82/100 due to Iranian naval activity and AIS dark-shipping anomalies.` },
-                    { heading: 'Key Indicators', content: `Import Dependency: 88% of crude sourced from imports. Hormuz Transit: 42% of Indian crude imports. SPR Cover: 9.5 days (vs IEA 90-day benchmark). Brent Crude: $84.12/bbl (+2.94% 24h).` },
+                    { heading: 'Key Indicators', content: `Import Dependency: 88% of crude sourced from imports. Hormuz Transit: 42% of Indian crude imports. SPR Cover: 9.5 days (vs IEA 90-day benchmark). Brent Crude: ₹${(84.12 * 83.42).toFixed(2)}/bbl (+2.94% 24h).` },
                     { heading: 'Active Alerts', content: `CRITICAL: Iran seizes second tanker in Hormuz within 48h; US Fifth Fleet raises posture. HIGH: Anti-ship missile fired near Bab-el-Mandeb transit zone. ELEVATED: Shipping congestion at South African bunkering ports due to diversion flows.` },
                   ],
-                  { headers: ['Corridor', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], rows: riskData.map(r => [r.name, r.score.toFixed(1), r.delta, r.vol, r.barrels]) },
+                  { headers: ['Corridor', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], rows: riskDataState.map(r => [r.name, r.score.toFixed(1), r.delta, r.vol, r.barrels]) },
                   MOCK_RISK_SCORE.reasoning_trail
                 )}
               >
@@ -356,7 +378,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
               </button>
               {/* Export CSV */}
               <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}
-                onClick={() => exportToCSV('PRAVAH_Corridor_Risk', ['Corridor', 'Short', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], riskData.map(r => [r.name, r.short, r.score.toFixed(1), r.delta, r.vol, r.barrels]))}
+                onClick={() => exportToCSV('PRAVAH_Corridor_Risk', ['Corridor', 'Short', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], riskDataState.map(r => [r.name, r.short, r.score.toFixed(1), r.delta, r.vol, r.barrels]))}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <FileText style={{ width: 18, height: 18, color: '#22c55e' }} /> Export CSV Data

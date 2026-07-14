@@ -176,8 +176,8 @@ export default function DigitalTwin() {
         {/* Map Container */}
         <div style={{ flex: 1, position: 'relative', background: 'radial-gradient(circle at center, #0f172a 0%, #020617 100%)' }}>
           
-          <ComposableMap projection="geoMercator" projectionConfig={{ scale: 650, center: [65, 15] }} style={{ width: '100%', height: '100%' }}>
-            <ZoomableGroup zoom={1}>
+          <ComposableMap projection="geoMercator" projectionConfig={{ scale: 150 }} style={{ width: '100%', height: '100%' }}>
+            <ZoomableGroup center={[20, 20]} zoom={1.2}>
               <Geographies geography={geoUrl}>
                 {({ geographies }) =>
                   geographies.map((geo) => (
@@ -185,8 +185,8 @@ export default function DigitalTwin() {
                       key={geo.rsmKey} 
                       geography={geo} 
                       fill="#1e293b" 
-                      stroke="#334155" 
-                      strokeWidth={0.5} 
+                      stroke="#475569" 
+                      strokeWidth={1.5} 
                       style={{
                         default: { outline: 'none' },
                         hover: { fill: '#334155', outline: 'none' },

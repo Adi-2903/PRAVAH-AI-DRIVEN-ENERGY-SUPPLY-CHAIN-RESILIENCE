@@ -55,7 +55,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <span style={{ color: '#fbbf24', fontWeight: 600 }}>Price</span>
-          <span style={{ fontFamily: 'var(--font-mono)', color: '#fff', fontWeight: 700 }}>${data.price_usd.toFixed(2)}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', color: '#fff', fontWeight: 700 }}>₹{(data.price_usd * 83.42).toFixed(2)}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <span style={{ color: '#f87171', fontWeight: 600 }}>Risk Score</span>
@@ -197,7 +197,7 @@ export default function SPROptimizer() {
               <div style={{ padding: 24 }}>
                 <h3 style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>Value Optimized vs. Baseline</h3>
                 <div style={{ fontSize: 36, fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#34d399', letterSpacing: '-0.03em', lineHeight: 1 }}>
-                  ${(result.savings_usd / 1000000).toFixed(2)}M
+                  ₹{((result.savings_usd * 83.42) / 10000000).toFixed(2)}Cr
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginTop: 8, marginBottom: 24 }}>
                   {result.savings_pct.toFixed(1)}% savings generated
@@ -207,7 +207,7 @@ export default function SPROptimizer() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>
                       <span>Naive Baseline</span>
-                      <span>${(result.baseline_cost_usd / 1000000).toFixed(1)}M Cost</span>
+                      <span>₹{((result.baseline_cost_usd * 83.42) / 10000000).toFixed(1)}Cr Cost</span>
                     </div>
                     <div className="risk-bar-track" style={{ height: 6, background: 'rgba(255,255,255,0.05)' }}>
                       <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.2)' }} />
@@ -216,7 +216,7 @@ export default function SPROptimizer() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#34d399', marginBottom: 6 }}>
                       <span>Optimized</span>
-                      <span>${(result.optimized_cost_usd / 1000000).toFixed(1)}M Cost</span>
+                      <span>₹{((result.optimized_cost_usd * 83.42) / 10000000).toFixed(1)}Cr Cost</span>
                     </div>
                     <div className="risk-bar-track" style={{ height: 6, background: 'rgba(255,255,255,0.05)' }}>
                       <div style={{ width: `${100 - result.savings_pct}%`, height: '100%', background: '#10b981', borderRadius: 10 }} />
@@ -257,7 +257,7 @@ export default function SPROptimizer() {
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                     <XAxis dataKey="day" stroke="transparent" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 600 }} tickMargin={12} />
                     <YAxis yAxisId="left" stroke="transparent" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11, fontFamily: 'var(--font-mono)' }} tickFormatter={v => `${v}d`} domain={[0, currentReserve + 1]} tickMargin={12} />
-                    <YAxis yAxisId="right" orientation="right" stroke="transparent" tick={{ fill: '#fbbf24', fontSize: 11, fontFamily: 'var(--font-mono)' }} tickFormatter={v => `$${v}`} domain={['auto', 'auto']} tickMargin={12} />
+                    <YAxis yAxisId="right" orientation="right" stroke="transparent" tick={{ fill: '#fbbf24', fontSize: 11, fontFamily: 'var(--font-mono)' }} tickFormatter={v => `₹${(v * 83.42).toFixed(0)}`} domain={['auto', 'auto']} tickMargin={12} />
                     <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                     <ReferenceLine yAxisId="left" y={floor} stroke="#ef4444" strokeDasharray="4 4" 
                       label={{ position: 'insideBottomLeft', value: 'SAFETY FLOOR', fill: '#ef4444', fontSize: 10, fontWeight: 'bold', offset: 10 }} />
@@ -330,7 +330,7 @@ export default function SPROptimizer() {
                         </span>
                       </td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#2dd4bf' }}>{row.reserve_after_days.toFixed(2)}d</td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#fbbf24' }}>${row.price_usd.toFixed(2)}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#fbbf24' }}>₹{(row.price_usd * 83.42).toFixed(2)}</td>
                       <td>
                         <span style={{
                           fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 6,
