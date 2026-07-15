@@ -5,9 +5,18 @@ import {
   ComposedChart, Area, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
-import { Zap, Clock, Activity, CheckCircle2, FileDown } from 'lucide-react';
+import { Zap, Clock, CheckCircle2, FileDown, Wifi, WifiOff } from 'lucide-react';
 import { exportSPRScheduleCSV } from './lib/export';
 import { serviceUrl } from './lib/api';
+import { loadCorridors } from './lib/live-data';
+import type { LiveCorridor } from './lib/live-data';
+
+const SPR_CORRIDORS = [
+  { id: 'hormuz', label: 'Strait of Hormuz' },
+  { id: 'redsea', label: 'Red Sea / Bab-el-Mandeb' },
+  { id: 'cape', label: 'Cape of Good Hope' },
+  { id: 'domestic', label: 'Domestic Pipeline' },
+];
 
 interface DailySchedule {
   day: number;
@@ -75,16 +84,49 @@ export default function SPROptimizer() {
   const [horizon, setHorizon] = useState(14);
   const [floor, setFloor] = useState(3.0);
   const [maxDrawdown, setMaxDrawdown] = useState(1.0);
+  const [corridor, setCorridor] = useState('hormuz');
+  const [corridors, setCorridors] = useState<LiveCorridor[]>([]);
   const [result, setResult] = useState<SPRScheduleResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [isMock, setIsMock] = useState(false);
-  
-  const currentReserve = 9.5;
+  const [inputsLive, setInputsLive] = useState(false);
+
+  const currentReserve = 9.5;  // ISPRL published reference cover (days)
+  const corridorRisk = corridors.find(c => c.corridor_id === corridor)?.score ?? 78;
+
+  // Load real corridor risk scores once (used as the SPR risk input, not synthetic).
+  useEffect(() => { loadCorridors().then(({ data }) => setCorridors(data)); }, []);
 
   const fetchOptimization = useCallback(async () => {
     setLoading(true);
+
+    // 1) Real forecast inputs: median price path from /simulate, risk from /corridors.
+    let prices: number[];
+    let riskScores: number[];
+    let liveInputs = false;
     try {
-      const mockInputs = generateMockData(horizon);
+      const simRes = await fetch(serviceUrl('scenario', '/simulate'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          risk_score: corridorRisk, corridor, shock_duration_days: horizon,
+          num_simulations: 4000, current_brent_usd: 84.0,
+          elasticity_assumptions: { price_elasticity_of_demand: -0.05, pass_through_rate_to_pump: 0.6, gdp_sensitivity_per_10pct_oil_shock: -0.15 },
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!simRes.ok) throw new Error('sim failed');
+      const sim = await simRes.json();
+      prices = sim.daily_price_path.slice(0, horizon).map((p: { p50: number }) => Number(p.p50.toFixed(2)));
+      riskScores = Array(horizon).fill(corridorRisk);
+      liveInputs = true;
+    } catch {
+      const m = generateMockData(horizon);   // offline: synthetic inputs (clearly badged)
+      prices = m.price; riskScores = m.risk;
+    }
+    setInputsLive(liveInputs);
+
+    // 2) Optimize the schedule against those inputs.
+    try {
       const res = await fetch(serviceUrl('spr', '/spr-schedule'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,21 +134,20 @@ export default function SPROptimizer() {
           planning_horizon_days: horizon,
           current_reserve_days: currentReserve,
           min_safety_floor_days: floor,
-          daily_risk_scores: mockInputs.risk,
-          daily_price_forecast_usd_per_bbl: mockInputs.price,
+          daily_risk_scores: riskScores,
+          daily_price_forecast_usd_per_bbl: prices,
           max_daily_drawdown_days: maxDrawdown
         }),
         signal: AbortSignal.timeout(8000)
       });
       if (!res.ok) throw new Error('API failed');
       setResult(await res.json());
-      setIsMock(false);
-    } catch (e) {
+      setIsMock(!liveInputs);
+    } catch {
       try {
         const m = await fetch(serviceUrl('spr', '/spr-schedule/mock'), { signal: AbortSignal.timeout(8000) });
         setResult(await m.json());
       } catch {
-        const mockInputs = generateMockData(horizon);
         const sched = [];
         let res = currentReserve;
         for(let i=0; i<horizon; i++) {
@@ -114,7 +155,7 @@ export default function SPROptimizer() {
           res -= d;
           sched.push({
             day: i+1, drawdown_days: d, reserve_after_days: res,
-            risk_score: mockInputs.risk[i], price_usd: mockInputs.price[i],
+            risk_score: riskScores[i], price_usd: prices[i],
             rationale: d > 0 ? "Strategic release." : "Reserve held."
           });
         }
@@ -129,7 +170,7 @@ export default function SPROptimizer() {
     } finally {
       setLoading(false);
     }
-  }, [horizon, floor, maxDrawdown, currentReserve]);
+  }, [horizon, floor, maxDrawdown, currentReserve, corridor, corridorRisk]);
 
   useEffect(() => {
     const handler = setTimeout(fetchOptimization, 400);
@@ -148,18 +189,32 @@ export default function SPROptimizer() {
             </div>
             SPR Release Optimizer
           </h1>
-          <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 8, fontWeight: 500 }}>Linear Programming solver for strategic reserve drawdown</p>
+          <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 8, fontWeight: 500 }}>
+            LP solver · price path from live scenario engine, risk from live corridor scoring
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>Corridor</div>
+            <select
+              value={corridor}
+              onChange={e => setCorridor(e.target.value)}
+              style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc', padding: '6px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, background: '#0f172a' }}
+            >
+              {SPR_CORRIDORS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>Current Reserve Cover</div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>Corridor Risk</div>
+            <div style={{ fontSize: 24, fontFamily: 'var(--font-mono)', fontWeight: 800, color: corridorRisk > 70 ? '#f87171' : corridorRisk > 40 ? '#fbbf24' : '#4ade80' }}>{corridorRisk.toFixed(0)}<span style={{ fontSize: 13, color: '#64748b' }}>/100</span></div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>SPR Cover · ISPRL</div>
             <div style={{ fontSize: 24, fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#2dd4bf' }}>{currentReserve} Days</div>
           </div>
-          {isMock && (
-             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#fbbf24' }}>
-               <Activity style={{ width: 14, height: 14 }} /> Offline Mode
-             </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: inputsLive ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', border: `1px solid ${inputsLive ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.2)'}`, padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: inputsLive ? '#34d399' : '#fbbf24' }}>
+            {inputsLive ? <><Wifi style={{ width: 14, height: 14 }} /> Live inputs</> : <><WifiOff style={{ width: 14, height: 14 }} /> Offline inputs</>}
+          </div>
         </div>
       </div>
 

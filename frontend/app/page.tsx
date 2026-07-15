@@ -23,6 +23,8 @@ import SPROptimizer from './spr';
 import ProcurementModule from './procurement';
 import RiskIntelligence from './risk-intelligence';
 import CitizenView from './citizen-view';
+import { loadCorridors, loadMarket, compositeIndex, alertLevelFor } from './lib/live-data';
+import type { MarketData } from './lib/live-data';
 
 type ViewTier = 'citizen' | 'analyst' | 'policy';
 
@@ -35,15 +37,21 @@ const TABS = [
   { id: 'twin',         label: 'Digital Twin',        icon: Globe, disabled: true },
 ];
 
-const TICKER_ITEMS = [
-  { sym: 'BRENT', val: '$84.12', chg: '+2.94%', up: true },
-  { sym: 'WTI',   val: '$80.55', chg: '+2.39%', up: true },
-  { sym: 'USD/INR', val: '₹83.42', chg: '-0.14%', up: false },
-  { sym: 'INDIA-IMP', val: '$81.04', chg: '+2.17%', up: true },
-  { sym: 'NAT-GAS', val: '$2.81', chg: '-1.06%', up: false },
-  { sym: 'DUBAI', val: '$82.90', chg: '+2.60%', up: true },
-  { sym: 'OMAN',  val: '$83.15', chg: '+2.40%', up: true },
-];
+// Ticker is built from the live /market response (no fabricated % changes —
+// the backend does not provide day-over-day deltas, so none are shown).
+function buildTicker(m: MarketData | null): { sym: string; val: string }[] {
+  if (!m) return [];
+  return [
+    { sym: 'BRENT', val: `$${m.brent_usd.toFixed(2)}` },
+    { sym: 'WTI', val: `$${m.wti_usd.toFixed(2)}` },
+    { sym: 'DUBAI', val: `$${m.dubai_usd.toFixed(2)}` },
+    { sym: 'OMAN', val: `$${m.oman_usd.toFixed(2)}` },
+    { sym: 'USD/INR', val: `₹${m.usd_inr.toFixed(2)}` },
+    { sym: 'NAT-GAS', val: `$${m.nat_gas_usd.toFixed(2)}` },
+  ];
+}
+
+const ALERT_LEVEL_NUM: Record<string, number> = { low: 1, elevated: 2, high: 3, critical: 4 };
 
 const TIER_CONFIG = {
   citizen: { label: 'Citizen', icon: Eye, color: '#22c55e', desc: 'Quick risk overview' },
@@ -156,6 +164,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [viewTier, setViewTier] = useState<ViewTier>('citizen');
   const [time, setTime] = useState('');
+  const [composite, setComposite] = useState<number | null>(null);
+  const [market, setMarket] = useState<MarketData | null>(null);
+  const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
     const update = () => setTime(new Date().toLocaleTimeString('en-IN', { hour12: false }));
@@ -163,6 +174,25 @@ export default function App() {
     const t = setInterval(update, 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Live composite risk index + market prices for the shell header/sidebar.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const [c, m] = await Promise.all([loadCorridors(), loadMarket()]);
+      if (cancelled) return;
+      setComposite(compositeIndex(c.data));
+      setMarket(m.data);
+      setIsLive(c.is_live);
+    };
+    load();
+    const t = setInterval(load, 60000); // refresh every minute
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
+  const compositeAlert = composite != null ? alertLevelFor(composite) : 'low';
+  const alertNum = ALERT_LEVEL_NUM[compositeAlert] ?? 1;
+  const ticker = buildTicker(market);
 
   // ─── Citizen View: Full-screen, no sidebar ───
   if (viewTier === 'citizen') {
@@ -231,26 +261,27 @@ export default function App() {
             </div>
           </div>
 
-          {/* Live status pill */}
-          <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '7px 12px',
-              borderRadius: 8,
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.2)',
-            }}>
-              <span className="pulse-dot" style={{
-                width: 7, height: 7, borderRadius: '50%',
-                background: '#ef4444', display: 'block', flexShrink: 0,
-              }} />
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#fca5a5', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                Alert Level 3 · Elevated
-              </span>
-            </div>
-          </div>
+          {/* Live status pill (derived from composite alert level) */}
+          {(() => {
+            const tone = compositeAlert === 'critical' || compositeAlert === 'high'
+              ? { bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.2)', dot: '#ef4444', text: '#fca5a5' }
+              : compositeAlert === 'elevated'
+                ? { bg: 'rgba(234,179,8,0.12)', border: 'rgba(234,179,8,0.2)', dot: '#eab308', text: '#fde68a' }
+                : { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.2)', dot: '#22c55e', text: '#86efac' };
+            return (
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 8,
+                  background: tone.bg, border: `1px solid ${tone.border}`,
+                }}>
+                  <span className="pulse-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: tone.dot, display: 'block', flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, fontWeight: 700, color: tone.text, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    Alert Level {alertNum} · {compositeAlert}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Navigation */}
           <div style={{ padding: '20px 12px' }}>
@@ -290,22 +321,27 @@ export default function App() {
             </nav>
           </div>
 
-          {/* Composite Risk Index widget */}
-          <div style={{ margin: '4px 12px', padding: '16px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="label-caps" style={{ marginBottom: 8 }}>Composite Risk Index</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
-              <span style={{ fontSize: 28, fontWeight: 800, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>74</span>
-              <span style={{ fontSize: 13, color: 'rgba(148,163,184,0.6)', fontWeight: 600 }}>/100</span>
-            </div>
-            <div style={{ height: 5, borderRadius: 5, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: 8 }}>
-              <div style={{
-                height: '100%', width: '74%', borderRadius: 5,
-                background: 'linear-gradient(90deg, #eab308, #ef4444)',
-                transition: 'width 1s ease',
-              }} />
-            </div>
-            <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.5)', fontWeight: 600 }}>+12 pts vs 7-day avg</div>
-          </div>
+          {/* Composite Risk Index widget (live, throughput-weighted) */}
+          {(() => {
+            const val = composite ?? 0;
+            const barColor = val > 70 ? '#ef4444' : val > 45 ? '#f97316' : val > 30 ? '#eab308' : '#22c55e';
+            return (
+              <div style={{ margin: '4px 12px', padding: '16px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="label-caps" style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Composite Risk Index</span>
+                  <span style={{ color: isLive ? '#22c55e' : 'rgba(148,163,184,0.6)' }}>{isLive ? 'LIVE' : 'OFFLINE'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
+                  <span style={{ fontSize: 28, fontWeight: 800, color: barColor, fontFamily: 'var(--font-mono)' }}>{composite ?? '—'}</span>
+                  <span style={{ fontSize: 13, color: 'rgba(148,163,184,0.6)', fontWeight: 600 }}>/100</span>
+                </div>
+                <div style={{ height: 5, borderRadius: 5, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: 8 }}>
+                  <div style={{ height: '100%', width: `${val}%`, borderRadius: 5, background: `linear-gradient(90deg, #eab308, ${barColor})`, transition: 'width 1s ease' }} />
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.5)', fontWeight: 600, textTransform: 'capitalize' }}>Alert level: {compositeAlert}</div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Bottom classification */}
@@ -376,46 +412,61 @@ export default function App() {
             </div>
           </div>
 
-          {/* Alert bar */}
-          <div className="alert-bar-critical" style={{
+          {/* Alert bar (live composite + live Brent; no fabricated deltas) */}
+          <div className={compositeAlert === 'critical' || compositeAlert === 'high' ? 'alert-bar-critical' : 'alert-bar-critical'} style={{
             height: 38,
             padding: '0 28px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            background: compositeAlert === 'critical' ? undefined
+              : compositeAlert === 'high' ? 'linear-gradient(90deg,#dc2626,#b91c1c)'
+              : compositeAlert === 'elevated' ? 'linear-gradient(90deg,#d97706,#b45309)'
+              : 'linear-gradient(90deg,#16a34a,#15803d)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 11, fontWeight: 700, color: 'white', letterSpacing: '0.04em' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block', animation: 'pulseDot 1.5s ease-in-out infinite' }} />
-                ALERT LEVEL 3 · ELEVATED
+                ALERT LEVEL {alertNum} · {compositeAlert.toUpperCase()}
               </span>
               <span style={{ color: 'rgba(255,255,255,0.4)' }}>|</span>
               <span>
                 Composite Risk Index:{' '}
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#fde68a', fontWeight: 800 }}>74/100</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: '#fde68a', fontWeight: 800 }}>{composite ?? '—'}/100</span>
               </span>
               <span style={{ color: 'rgba(255,255,255,0.4)' }}>|</span>
               <span>
                 Brent Crude Spot:{' '}
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#86efac', fontWeight: 800 }}>$84.12{' '}
-                  <span style={{ color: '#4ade80' }}>↑ +2.94%</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: '#86efac', fontWeight: 800 }}>
+                  {market ? `$${market.brent_usd.toFixed(2)}` : '—'}
                 </span>
+                <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600, marginLeft: 6 }}>· EIA ref</span>
               </span>
+              {market && (
+                <>
+                  <span style={{ color: 'rgba(255,255,255,0.4)' }}>|</span>
+                  <span>
+                    USD/INR:{' '}
+                    <span style={{ fontFamily: 'var(--font-mono)', color: '#86efac', fontWeight: 800 }}>₹{market.usd_inr.toFixed(2)}</span>
+                    <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600, marginLeft: 6 }}>{market.is_live ? '· live' : '· ref'}</span>
+                  </span>
+                </>
+              )}
             </div>
 
-            {/* Ticker strip */}
-            <div style={{ overflow: 'hidden', maxWidth: 340, maskImage: 'linear-gradient(90deg, transparent, black 15%, black 85%, transparent)' }}>
-              <div className="ticker-track" style={{ display: 'flex', gap: 32, whiteSpace: 'nowrap' }}>
-                {[...TICKER_ITEMS, ...TICKER_ITEMS].map((t, i) => (
-                  <span key={i} style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>
-                    <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}>{t.sym}</span>
-                    {' '}{t.val}
-                    {' '}
-                    <span style={{ color: t.up ? '#86efac' : '#fca5a5' }}>{t.chg}</span>
-                  </span>
-                ))}
+            {/* Ticker strip (live /market) */}
+            {ticker.length > 0 && (
+              <div style={{ overflow: 'hidden', maxWidth: 340, maskImage: 'linear-gradient(90deg, transparent, black 15%, black 85%, transparent)' }}>
+                <div className="ticker-track" style={{ display: 'flex', gap: 32, whiteSpace: 'nowrap' }}>
+                  {[...ticker, ...ticker].map((t, i) => (
+                    <span key={i} style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>
+                      <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}>{t.sym}</span>
+                      {' '}{t.val}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </header>
 

@@ -1,0 +1,21 @@
+# Render blueprint for the Pravah monolith backend (single file: api.py).
+# Native Python runtime (pip + uvicorn). Deploy: Render Dashboard → New → Blueprint
+# → pick this repo, or create a Web Service manually with the same build/start commands.
+services:
+  - type: web
+    name: pravah-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # Comma-separated allow-list of frontend origins for CORS.
+      # Set to your Vercel URL after the frontend deploys (e.g.
+      # https://pravah.vercel.app). Leave unset to allow all ("*") for demos.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Optional: real EIA Brent history for the Simulator. Without it the
+      # scenario engine calibrates from the embedded CSV fallback (still works).
+      - key: EIA_API_KEY
+        sync: false

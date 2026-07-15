@@ -1,5 +1,11 @@
 # Stage 8 (Frontend + Digital Twin) — Engineering Review & Test Plan
 
+> ⚠️ **SUPERSEDED — HISTORICAL ONLY.** This review predates the backend consolidation.
+> "BUG-3" below flags a mismatch against `docker-compose.yml` port mappings — that file
+> and the per-agent container setup no longer exist. Production is the native
+> **`api.py` monolith** (Render + Vercel, no containers); the frontend now points every
+> `NEXT_PUBLIC_*` var at the one backend URL. Kept only as a historical record.
+
 **Reviewer:** automated SWE review · **Branch:** `Preetansh` · **Commit under review:** `1974350` "Add frontend tiered views and intelligence modules" (author: Wolfy15 / jenilpaghdar)
 **Scope:** `frontend/` — the Stage 8 deliverable per README: *3-tier product shell (Citizen / Analyst / Policy), onboarding chooser, map, charts, PDF/CSV export, all against mocks shaped like the frozen schemas.*
 

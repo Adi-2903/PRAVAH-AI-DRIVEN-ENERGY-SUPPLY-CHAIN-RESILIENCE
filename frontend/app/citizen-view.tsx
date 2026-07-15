@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { Shield, TrendingUp, Fuel, Clock, ChevronRight, Activity } from 'lucide-react';
-import { MOCK_RISK_SCORE, MOCK_COORDINATOR, CORRIDOR_RISK_DATA } from './lib/mock-data';
+import { MOCK_COORDINATOR } from './lib/mock-data';
+import type { CoordinatorResponse } from './lib/mock-data';
+import { postWithFallback } from './lib/api';
+import { loadCorridors, loadMarket, compositeIndex } from './lib/live-data';
+import type { LiveCorridor, MarketData } from './lib/live-data';
 import DataFreshness from './components/data-freshness';
 
 /* ─── Animated Risk Gauge ──────────────────────── */
@@ -91,18 +95,18 @@ function RiskGauge({ score, size = 220 }: { score: number; size?: number }) {
   );
 }
 
-/* ─── Simplified Map ──────────────────────────── */
-function SimpleMap() {
-  const corridors = CORRIDOR_RISK_DATA;
-  const getColor = (s: number) => s > 70 ? '#ef4444' : s > 40 ? '#f97316' : '#22c55e';
+/* ─── Simplified Map (driven by live corridor scores) ─────────── */
+const MAP_POS: Record<string, { label: string; x: number; y: number }> = {
+  hormuz: { label: 'Hormuz', x: 274, y: 126 },
+  redsea: { label: 'Red Sea', x: 175, y: 152 },
+  cape:   { label: 'Cape', x: 138, y: 320 },
+};
 
-  const points: { label: string; x: number; y: number; score: number }[] = [
-    { label: 'Hormuz', x: 274, y: 126, score: corridors[0].score },
-    { label: 'Red Sea', x: 175, y: 152, score: corridors[1].score },
-    { label: 'Suez', x: 155, y: 110, score: corridors[2].score },
-    { label: 'Cape', x: 138, y: 320, score: corridors[3].score },
-    { label: 'Malacca', x: 553, y: 248, score: corridors[4].score },
-  ];
+function SimpleMap({ corridors }: { corridors: LiveCorridor[] }) {
+  const getColor = (s: number) => s > 70 ? '#ef4444' : s > 40 ? '#f97316' : '#22c55e';
+  const points = corridors
+    .filter(c => MAP_POS[c.corridor_id])
+    .map(c => ({ ...MAP_POS[c.corridor_id], score: c.score }));
 
   return (
     <div style={{
@@ -122,7 +126,6 @@ function SimpleMap() {
         <path d="M 138,340 Q 230,305 385,205" stroke="rgba(34,197,94,0.4)" strokeWidth="1.5" strokeDasharray="4 3" />
         <path d="M 175,152 Q 248,162 385,205" stroke="rgba(249,115,22,0.5)" strokeWidth="2" strokeDasharray="4 3" />
         <path d="M 275,126 Q 326,155 385,205" stroke="rgba(239,68,68,0.6)" strokeWidth="2.5" strokeDasharray="4 3" />
-        <path d="M 553,248 Q 465,232 385,205" stroke="rgba(34,197,94,0.4)" strokeWidth="1.5" strokeDasharray="4 3" />
 
         {/* India marker */}
         <circle cx="385" cy="205" r="6" fill="#3b82f6" opacity="0.9" />
@@ -138,7 +141,7 @@ function SimpleMap() {
                 <circle cx={p.x} cy={p.y} r={14} stroke={c} strokeWidth="1" fill="none" opacity="0.35" className="pulse-dot" />
               )}
               <text x={p.x + 12} y={p.y + 4} fill={c} fontSize="9" fontWeight="bold" fontFamily="sans-serif" opacity="0.9">
-                {p.label} · {p.score}
+                {p.label} · {p.score.toFixed(0)}
               </text>
             </g>
           );
@@ -150,9 +153,18 @@ function SimpleMap() {
 
 /* ─── Main Citizen View ──────────────────────── */
 export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) {
-  const risk = MOCK_RISK_SCORE;
-  const coord = MOCK_COORDINATOR;
+  const [coord, setCoord] = useState<CoordinatorResponse>(MOCK_COORDINATOR);
+  const [corridors, setCorridors] = useState<LiveCorridor[]>([]);
+  const [market, setMarket] = useState<MarketData | null>(null);
   const [time, setTime] = useState('');
+
+  useEffect(() => {
+    // Coordinator blend for the plain-English summary; corridors for the index+map; market for prices.
+    postWithFallback<CoordinatorResponse>('coordinator', '/final-recommendation', { corridor: 'hormuz' }, MOCK_COORDINATOR)
+      .then(({ data }) => setCoord(data));
+    loadCorridors().then(({ data }) => setCorridors(data));
+    loadMarket().then(({ data }) => setMarket(data));
+  }, []);
 
   useEffect(() => {
     const update = () => setTime(new Date().toLocaleTimeString('en-IN', { hour12: false }));
@@ -161,13 +173,22 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
     return () => clearInterval(t);
   }, []);
 
+  // National index = throughput-weighted composite of live corridor scores
+  // (falls back to the coordinator's corridor score before corridors load).
+  const composite = corridors.length ? compositeIndex(corridors) : Math.round(coord.risk.score);
+  const topCorridor = corridors.length
+    ? corridors.reduce((a, b) => (b.score > a.score ? b : a))
+    : null;
+  const asOf = corridors[0]?.as_of ?? coord.risk.computed_at;
+
   const getHeadline = (score: number) => {
-    if (score > 75) return { text: 'elevated risk', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' };
-    if (score > 50) return { text: 'moderate risk', color: '#f97316', bg: 'rgba(249,115,22,0.08)' };
-    if (score > 30) return { text: 'low-moderate risk', color: '#eab308', bg: 'rgba(234,179,8,0.08)' };
+    if (score > 75) return { text: 'critical risk', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' };
+    if (score > 50) return { text: 'high risk', color: '#f97316', bg: 'rgba(249,115,22,0.08)' };
+    if (score > 30) return { text: 'moderate risk', color: '#eab308', bg: 'rgba(234,179,8,0.08)' };
     return { text: 'low risk', color: '#22c55e', bg: 'rgba(34,197,94,0.08)' };
   };
-  const headline = getHeadline(risk.score);
+  const headline = getHeadline(composite);
+  const driverName = topCorridor?.name ?? 'Strait of Hormuz';
 
   return (
     <div style={{
@@ -194,7 +215,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
           <span style={{ fontSize: 10, color: 'rgba(148,163,184,0.5)', fontWeight: 600 }}>· Energy Supply Chain Resilience</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <DataFreshness as_of={risk.computed_at} source="Live Pipeline" />
+          <DataFreshness as_of={asOf} source="Live Pipeline" />
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
             color: 'rgba(148,163,184,0.6)', background: 'rgba(255,255,255,0.04)',
@@ -218,7 +239,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
           }}>
             India Energy Supply Risk Index
           </div>
-          <RiskGauge score={risk.score} />
+          <RiskGauge score={composite} />
         </div>
 
         {/* Plain-English Headline */}
@@ -230,7 +251,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
             fontSize: 26, fontWeight: 700, color: '#f1f5f9',
             lineHeight: 1.5, letterSpacing: '-0.01em',
           }}>
-            India's energy supply faces{' '}
+            India&apos;s energy supply faces{' '}
             <span style={{
               color: headline.color,
               padding: '2px 8px', borderRadius: 6,
@@ -238,7 +259,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
             }}>
               {headline.text}
             </span>
-            {' '}due to Strait of Hormuz tensions
+            {' '}— top driver: {driverName}
           </h1>
           <p style={{
             fontSize: 14, color: 'rgba(148,163,184,0.7)', marginTop: 14,
@@ -250,19 +271,19 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
 
         {/* Map */}
         <div className="fade-in" style={{ width: '100%', marginBottom: 32, animationDelay: '0.3s' }}>
-          <SimpleMap />
+          <SimpleMap corridors={corridors} />
         </div>
 
-        {/* KPI Row */}
+        {/* KPI Row — one LIVE price + three published reference figures */}
         <div className="fade-in" style={{
           display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12,
-          width: '100%', marginBottom: 40, animationDelay: '0.45s',
+          width: '100%', marginBottom: 16, animationDelay: '0.45s',
         }}>
           {[
-            { icon: TrendingUp, label: 'Brent Crude', value: '$84.12', sub: '+6.1% 24h', color: '#ef4444' },
-            { icon: Fuel, label: 'Import Dependency', value: '88%', sub: 'Crude oil', color: '#3b82f6' },
-            { icon: Shield, label: 'SPR Cover', value: '9.5 days', sub: 'vs 90-day IEA', color: '#eab308' },
-            { icon: Activity, label: 'Import Bill', value: '$137B', sub: 'FY 2024-25', color: '#8b5cf6' },
+            { icon: TrendingUp, label: 'Brent Crude', value: market ? `$${market.brent_usd.toFixed(2)}` : '—', sub: 'EIA reference spot', color: '#ef4444', live: false },
+            { icon: Fuel, label: 'Import Dependency', value: '88%', sub: 'PPAC FY24-25', color: '#3b82f6', live: false },
+            { icon: Shield, label: 'SPR Cover', value: '9.5 days', sub: 'ISPRL', color: '#eab308', live: false },
+            { icon: Activity, label: 'Crude Import Bill', value: '$137B', sub: 'PPAC FY24-25', color: '#8b5cf6', live: false },
           ].map(kpi => {
             const Icon = kpi.icon;
             return (
@@ -272,12 +293,12 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
                 border: '1px solid rgba(255,255,255,0.06)',
                 display: 'flex', flexDirection: 'column', gap: 6,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Icon style={{ width: 13, height: 13, color: kpi.color }} />
-                  <span style={{
-                    fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
-                    textTransform: 'uppercase', color: 'rgba(148,163,184,0.5)',
-                  }}>{kpi.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon style={{ width: 13, height: 13, color: kpi.color }} />
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(148,163,184,0.5)' }}>{kpi.label}</span>
+                  </span>
+                  <span style={{ fontSize: 7, fontWeight: 800, letterSpacing: '0.06em', color: kpi.live ? '#22c55e' : 'rgba(148,163,184,0.5)', background: kpi.live ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.1)', padding: '1px 4px', borderRadius: 3 }}>{kpi.live ? 'LIVE' : 'REF'}</span>
                 </div>
                 <div style={{
                   fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800,
@@ -287,6 +308,9 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
               </div>
             );
           })}
+        </div>
+        <div className="fade-in" style={{ fontSize: 9, color: 'rgba(148,163,184,0.4)', marginBottom: 40, textAlign: 'center', animationDelay: '0.5s' }}>
+          Risk index computed live from corridor scores · reference figures per PPAC / ISPRL · illustrative prototype
         </div>
 
         {/* Go Deeper CTA */}
@@ -314,7 +338,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
             fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
             textTransform: 'uppercase', color: 'rgba(148,163,184,0.3)',
           }}>Powered by</span>
-          {['EIA', 'GDELT', 'AIS Tracking', 'OFAC'].map(src => (
+          {['EIA', 'GDELT', 'PPAC', 'ISPRL'].map(src => (
             <span key={src} style={{
               fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.4)',
               padding: '3px 8px', borderRadius: 4,
