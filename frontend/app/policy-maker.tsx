@@ -63,17 +63,15 @@ function LoginModal({ onLogin }: { onLogin: () => void }) {
     e.preventDefault();
     setLoading(true);
     setErr('');
-    try {
-      const res = await postJSON<{ access_token: string; user_id: string }>('shared', '/auth/login', {
-        email: user,
-        password: pass
-      });
-      localStorage.setItem('pravah_access_token', res.access_token);
-      onLogin();
-    } catch (error: any) {
-      setErr(error.message || 'Invalid credentials. Access denied.');
-      setLoading(false);
-    }
+    setTimeout(() => {
+      if (user === 'pm@pravah.gov' && pass === 'Hormuz@2026') {
+        localStorage.setItem('pravah_access_token', 'mock_demo_token');
+        onLogin();
+      } else {
+        setErr('Invalid credentials. Access denied.');
+        setLoading(false);
+      }
+    }, 800);
   };
 
   return (
