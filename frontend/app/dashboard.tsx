@@ -30,6 +30,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
 
   useEffect(() => {
     const now = new Date();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLiveDate(now.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase());
   }, []);
 
@@ -43,6 +44,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
     setLoading(false);
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { refresh(); }, []);
 
   const composite = corridors.length ? compositeIndex(corridors) : 0;

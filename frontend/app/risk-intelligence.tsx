@@ -169,6 +169,7 @@ export default function RiskIntelligence() {
     setLoading(false);
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { refresh(); }, []);
 
   const selected = corridors[selectedCorridor];
