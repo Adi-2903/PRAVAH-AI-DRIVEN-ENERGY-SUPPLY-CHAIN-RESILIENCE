@@ -1,5 +1,13 @@
 # Stage 9 — Coordinator + Real Integration — Implementation Plan
 
+> ⚠️ **SUPERSEDED — HISTORICAL ONLY.** This plan describes a per-agent *microservice*
+> approach (one FastAPI container per agent, `docker compose up`, service-DNS wiring).
+> That architecture was **not** the one shipped. Production is the single-file
+> **`api.py` monolith** deployed **natively** — Render (Python) + Vercel (Next.js),
+> **no Docker/containers**. Every Docker reference below is obsolete; keep this file
+> only as a record of the design evolution. Current state: `PRODUCTION_READINESS.md`,
+> `RELEASE_GATE.md`, `DEPLOY.md`.
+
 **Goal (README):** *Build `coordinator/` to call all four agents and resolve conflicts into one final recommendation. Swap frontend mocks for real URLs. First day everything talks to everything.*
 
 **Reality check (verified in code):** Stage 9 is **not** "just wire URLs." The frozen contracts drifted, so there is real reconciliation and hardening to do before things can talk to each other reliably. This plan makes that explicit and sequences it for a **production-ready** result, not a demo-only one.

@@ -2,23 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import {
-  AlertTriangle, TrendingUp, ChevronRight,
-  Activity, BarChart3, Shield, Anchor, AlertCircle, Zap, Printer, FileDown, FileText
+  ChevronRight, Activity, BarChart3, Shield, Anchor, AlertCircle, Zap, Wifi, WifiOff, RefreshCw
 } from 'lucide-react';
 import DataFreshness from './components/data-freshness';
-import { MOCK_RISK_SCORE, CORRIDOR_RISK_DATA, LIVE_SIGNALS } from './lib/mock-data';
-import { exportToPDF, exportToCSV, printReport } from './lib/export';
-import { postJSON } from './lib/api';
-
-// Single source of truth: derive the corridor table + feed from mock-data.ts
-// (same data the Citizen and Risk Intelligence views use) so scores never
-// disagree across screens. Swap mock-data.ts for live endpoints in Stage 9.
-const riskData = CORRIDOR_RISK_DATA.map(c => ({
-  name: c.name, short: c.short, score: c.score,
-  trend: c.trend, delta: c.delta, vol: c.volatility, barrels: c.barrels,
-}));
-
-const feedItems = LIVE_SIGNALS.slice(0, 4);
+import { loadCorridors, loadMarket, compositeIndex, alertLevelFor, feedFromCorridors } from './lib/live-data';
+import type { LiveCorridor, MarketData } from './lib/live-data';
+import type { LiveSignal } from './lib/mock-data';
+import { exportToPDF } from './lib/export';
 
 function RiskBar({ score }: { score: number }) {
   const color = score > 70 ? '#ef4444' : score > 45 ? '#f97316' : '#22c55e';
@@ -32,66 +22,94 @@ function RiskBar({ score }: { score: number }) {
 export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const [liveDate, setLiveDate] = useState('');
   const [selectedFeed, setSelectedFeed] = useState<number | null>(null);
-  const [riskDataState, setRiskDataState] = useState(() => riskData);
-
-  useEffect(() => {
-    async function fetchRiskData() {
-      try {
-        const promises = riskData.map(async (corridor) => {
-          try {
-            const result = await postJSON<any>('risk', '/risk-score', { corridor: corridor.name });
-            return { ...corridor, score: result.score };
-          } catch (e) {
-            return corridor; // fallback to mock
-          }
-        });
-        const newRiskData = await Promise.all(promises);
-        setRiskDataState(newRiskData);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    fetchRiskData();
-  }, []);
+  const [corridors, setCorridors] = useState<LiveCorridor[]>([]);
+  const [feed, setFeed] = useState<LiveSignal[]>([]);
+  const [market, setMarket] = useState<MarketData | null>(null);
+  const [isLive, setIsLive] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const now = new Date();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLiveDate(now.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase());
   }, []);
 
+  const refresh = async () => {
+    setLoading(true);
+    const [c, m] = await Promise.all([loadCorridors(), loadMarket()]);
+    setCorridors(c.data);
+    setFeed(feedFromCorridors(c.data));
+    setMarket(m.data);
+    setIsLive(c.is_live);
+    setLoading(false);
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const composite = corridors.length ? compositeIndex(corridors) : 0;
+  const compositeAlert = alertLevelFor(composite);
+  const criticalCount = corridors.filter(c => c.alert_level === 'critical').length;
+  const topCorridor = corridors.length ? corridors.reduce((a, b) => (b.score > a.score ? b : a)) : null;
+  const asOf = corridors[0]?.as_of ?? new Date().toISOString();
+
+  // KPIs — three published reference figures (PPAC / MoP&NG / ISPRL) + one LIVE derived index.
   const kpis = [
-    { label: 'IMPORT DEPENDENCY', val: '88%',     sub: 'Crude sourced from imports',        icon: Anchor,       variant: 'info',     color: '#3b82f6' },
-    { label: 'HORMUZ TRANSIT',    val: '42%',     sub: 'Share of Indian crude imports',     icon: Activity,     variant: 'warning',  color: '#f97316' },
-    { label: 'SPR COVER',         val: '9.5 days',sub: 'Strategic reserve at national demand', icon: Shield,    variant: 'warning',  color: '#eab308' },
-    { label: 'COMPOSITE RISK',    val: '74/100',  sub: '+12 pts vs 7-day avg',               icon: AlertCircle, variant: 'critical', color: '#ef4444' },
+    { label: 'IMPORT DEPENDENCY', val: '88%', sub: 'Crude imports · PPAC FY24-25', icon: Anchor, variant: 'info', color: '#3b82f6', live: false },
+    { label: 'HORMUZ TRANSIT', val: '~42%', sub: 'Share of imports via Hormuz · PPAC', icon: Activity, variant: 'warning', color: '#f97316', live: false },
+    { label: 'SPR COVER', val: '9.5 days', sub: 'Strategic reserve · ISPRL', icon: Shield, variant: 'warning', color: '#eab308', live: false },
+    {
+      label: 'COMPOSITE RISK',
+      val: `${composite}/100`,
+      sub: topCorridor ? `Driver: ${topCorridor.name} (${topCorridor.score.toFixed(0)})` : 'Computing…',
+      icon: AlertCircle,
+      variant: composite > 70 ? 'critical' : composite > 45 ? 'warning' : 'info',
+      color: composite > 70 ? '#ef4444' : composite > 45 ? '#f97316' : '#22c55e',
+      live: true,
+    },
   ];
+
+  const feedItems = feed.slice(0, 4);
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1600, margin: '0 auto' }}>
 
       {/* Page Header */}
       <div style={{ marginBottom: 28, paddingBottom: 24, borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 6 }}>
-          Situation Report · {liveDate || '9 JULY 2026'}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 6 }}>
+              Situation Report · {liveDate || '—'}
+            </div>
+            <h1 style={{ fontSize: 34, fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
+              Command Center
+            </h1>
+            <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7, maxWidth: 680, fontWeight: 500 }}>
+              Anticipatory intelligence for India&apos;s crude oil supply chain. Corridor risk is scored live by the
+              backend; the composite index is a throughput-weighted blend of those scores.
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className={`badge ${isLive ? 'badge-low' : 'badge-elevated'}`} style={{ padding: '6px 10px' }}>
+              {isLive ? <><Wifi style={{ width: 12, height: 12 }} /> Live backend</> : <><WifiOff style={{ width: 12, height: 12 }} /> Offline (sample)</>}
+            </span>
+            <button onClick={refresh} disabled={loading} className="btn-secondary" style={{ padding: '6px 12px' }}>
+              <RefreshCw className={loading ? 'animate-spin' : ''} style={{ width: 13, height: 13 }} /> Refresh
+            </button>
+          </div>
         </div>
-        <h1 style={{ fontSize: 34, fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 8 }}>
-          Command Center
-        </h1>
-        <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7, maxWidth: 680, fontWeight: 500 }}>
-          Anticipatory intelligence for India&apos;s crude oil supply chain. Composite risk signals aggregated across corridors, suppliers, and market indicators — updated continuously.
-        </p>
       </div>
 
       {/* KPI Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 10 }}>
         {kpis.map((k, i) => {
           const Icon = k.icon;
           return (
             <div key={i} className={`kpi-card ${k.variant}`}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#94a3b8' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
                   {k.label}
+                  {k.live
+                    ? <span style={{ fontSize: 8, fontWeight: 800, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '1px 5px', borderRadius: 4, letterSpacing: '0.06em' }}>LIVE</span>
+                    : <span style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', background: 'rgba(148,163,184,0.12)', padding: '1px 5px', borderRadius: 4, letterSpacing: '0.06em' }}>REF</span>}
                 </span>
                 <div style={{ padding: 8, borderRadius: 10, background: `${k.color}14`, flexShrink: 0 }}>
                   <Icon style={{ width: 16, height: 16, color: k.color }} />
@@ -105,6 +123,9 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
           );
         })}
       </div>
+      <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500, marginBottom: 24 }}>
+        <strong>LIVE</strong> = computed by the backend now · <strong>REF</strong> = published reference figure (source noted). Illustrative prototype — not for operational use.
+      </div>
 
       {/* Map + Corridor Table */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, marginBottom: 24 }}>
@@ -115,8 +136,8 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0f172a' }}>Global Supply Network</div>
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
-                Corridors · chokepoints · vessels
-                <DataFreshness as_of={MOCK_RISK_SCORE.computed_at} compact />
+                Chokepoint alert levels (live)
+                <DataFreshness as_of={asOf} compact />
               </div>
             </div>
             <button
@@ -142,27 +163,39 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
               <path d="M 138,340 Q 230,305 385,205" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 4" opacity="0.8" />
               <path d="M 175,152 Q 248,162 385,205" stroke="#f97316" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.8" />
               <path d="M 275,126 Q 326,155 385,205" stroke="#ef4444" strokeWidth="3" strokeDasharray="6 4" opacity="0.9" />
-              <path d="M 553,248 Q 465,232 385,205" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 4" opacity="0.8" />
 
-              {/* Hormuz - critical */}
-              <circle cx="274" cy="126" r="9" fill="#ef4444" opacity="0.9" />
-              <circle cx="274" cy="126" r="18" stroke="#ef4444" strokeWidth="1.5" fill="none" opacity="0.4" className="pulse-dot" />
-              <rect x="278" y="108" rx="4" ry="4" width="130" height="20" fill="#0f172a" opacity="0.85" />
-              <text x="283" y="121" fill="#fca5a5" fontSize="9" fontWeight="bold" fontFamily="sans-serif">Strait of Hormuz · CRITICAL</text>
-
-              {/* Bab-el-Mandeb */}
-              <circle cx="175" cy="152" r="7" fill="#f97316" opacity="0.9" />
-              <rect x="100" y="160" rx="4" ry="4" width="108" height="20" fill="#0f172a" opacity="0.85" />
-              <text x="105" y="173" fill="#fdba74" fontSize="9" fontWeight="bold" fontFamily="sans-serif">Bab-el-Mandeb · HIGH</text>
-
-              {/* Malacca */}
-              <circle cx="553" cy="248" r="6" fill="#22c55e" opacity="0.9" />
-              <text x="518" y="278" fill="#4ade80" fontSize="9" fontWeight="bold" fontFamily="sans-serif">Malacca · LOW</text>
+              {(() => {
+                // Drive chokepoint markers from live corridor alert levels.
+                const byId = Object.fromEntries(corridors.map(c => [c.corridor_id, c]));
+                const col = (id: string) => {
+                  const s = byId[id]?.score ?? 0;
+                  return s > 70 ? '#ef4444' : s > 40 ? '#f97316' : '#22c55e';
+                };
+                const lvl = (id: string) => (byId[id]?.alert_level ?? '—').toUpperCase();
+                const pts = [
+                  { id: 'hormuz', label: 'Strait of Hormuz', x: 274, y: 126, lx: 283, ly: 121, w: 130 },
+                  { id: 'redsea', label: 'Bab-el-Mandeb', x: 175, y: 152, lx: 105, ly: 173, w: 118 },
+                  { id: 'cape', label: 'Cape of Good Hope', x: 138, y: 320, lx: 60, ly: 335, w: 128 },
+                ];
+                return pts.map(p => {
+                  const s = byId[p.id]?.score ?? 0;
+                  return (
+                  <g key={p.id}>
+                    <circle cx={p.x} cy={p.y} r={s > 70 ? 9 : 7} fill={col(p.id)} opacity="0.9" />
+                    {s > 60 && (
+                      <circle cx={p.x} cy={p.y} r={18} stroke={col(p.id)} strokeWidth="1.5" fill="none" opacity="0.4" className="pulse-dot" />
+                    )}
+                    <rect x={p.lx - 5} y={p.ly - 13} rx="4" ry="4" width={p.w} height="20" fill="#0f172a" opacity="0.85" />
+                    <text x={p.lx} y={p.ly} fill="#e2e8f0" fontSize="9" fontWeight="bold" fontFamily="sans-serif">{p.label} · {lvl(p.id)}</text>
+                  </g>
+                  );
+                });
+              })()}
 
               {/* Mumbai */}
               <circle cx="385" cy="205" r="10" fill="#3b82f6" opacity="0.9" />
               <circle cx="385" cy="205" r="20" stroke="#3b82f6" strokeWidth="1" fill="none" opacity="0.35" />
-              <text x="400" y="210" fill="#93c5fd" fontSize="10" fontWeight="bold" fontFamily="sans-serif">Mumbai</text>
+              <text x="400" y="210" fill="#1e40af" fontSize="10" fontWeight="bold" fontFamily="sans-serif">Mumbai</text>
             </svg>
           </div>
 
@@ -183,31 +216,33 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0f172a' }}>Corridor Risk Monitor</div>
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
-                Real-time geopolitical risk scoring
-                <DataFreshness as_of={CORRIDOR_RISK_DATA[0].as_of} compact />
+                Backend-scored geopolitical risk
+                <DataFreshness as_of={asOf} compact />
               </div>
             </div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-              <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'block' }} />
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Red Sea Alert Active</span>
-            </span>
+            {criticalCount > 0 && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'block' }} />
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{criticalCount} Critical Corridor{criticalCount > 1 ? 's' : ''}</span>
+              </span>
+            )}
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table className="data-table" style={{ tableLayout: 'auto' }}>
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Corridor</th>
                   <th>Risk Score</th>
                   <th style={{ minWidth: 140 }}>Risk Spread</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>24h Δ</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>Volatility</th>
-                  <th style={{ whiteSpace: 'nowrap', minWidth: 110 }}>Throughput</th>
-                  <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Action</th>
+                  <th>Alert</th>
+                  <th>Volatility</th>
+                  <th>Throughput</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {riskDataState.map(row => (
-                  <tr key={row.name} onClick={() => onNavigate?.('simulator')} style={{ cursor: 'pointer' }}>
+                {corridors.map(row => (
+                  <tr key={row.corridor_id} onClick={() => onNavigate?.('simulator')} style={{ cursor: 'pointer' }}>
                     <td>
                       <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{row.name}</div>
                       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#94a3b8', marginTop: 2 }}>{row.short}</div>
@@ -224,37 +259,31 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                       <RiskBar score={row.score} />
                     </td>
                     <td>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700,
-                        color: row.trend === 'up' ? '#ef4444' : row.trend === 'down' ? '#22c55e' : '#94a3b8',
-                        display: 'flex', alignItems: 'center', gap: 4
-                      }}>
-                        {row.trend === 'up' ? '▲' : row.trend === 'down' ? '▼' : '━'} {row.delta}
-                      </span>
+                      <span className={`badge badge-${row.alert_level}`}>{row.alert_level}</span>
                     </td>
                     <td>
-                      <span className={`badge badge-${row.vol === 'Very High' ? 'critical' : row.vol === 'High' ? 'high' : 'low'}`}>
-                        {row.vol}
+                      <span className={`badge badge-${row.volatility === 'Very High' ? 'critical' : row.volatility === 'High' ? 'high' : row.volatility === 'Moderate' ? 'elevated' : 'low'}`}>
+                        {row.volatility}
                       </span>
                     </td>
-                    <td style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{row.barrels}</td>
+                    <td style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{row.throughput ?? '—'}</td>
                     <td style={{ textAlign: 'right' }}>
                       <button
                         onClick={e => { e.stopPropagation(); onNavigate?.('simulator'); }}
                         style={{
                           fontSize: 11, fontWeight: 700, color: '#2563eb', background: 'rgba(59,130,246,0.06)',
                           border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, padding: '6px 12px',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                          transition: 'all 0.2s', marginLeft: 'auto',
+                          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto',
                         }}
-                        onMouseEnter={e => { (e.target as HTMLElement).closest('button')!.style.background = '#2563eb'; (e.target as HTMLElement).closest('button')!.style.color = '#fff'; }}
-                        onMouseLeave={e => { (e.target as HTMLElement).closest('button')!.style.background = 'rgba(59,130,246,0.06)'; (e.target as HTMLElement).closest('button')!.style.color = '#2563eb'; }}
                       >
                         Model <ChevronRight style={{ width: 12, height: 12 }} />
                       </button>
                     </td>
                   </tr>
                 ))}
+                {corridors.length === 0 && (
+                  <tr><td colSpan={7} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>{loading ? 'Loading corridors…' : 'No data'}</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -264,15 +293,15 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
       {/* Live Signals + Right Panel */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
 
-        {/* Live Signals Feed */}
+        {/* Scoring Events Feed */}
         <div className="card">
           <div className="card-header">
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0f172a' }}>Live Signals</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>News · AIS · Sanctions · Market</div>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0f172a' }}>Scoring Events</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Events driving the live corridor scores</div>
             </div>
-            <span className="badge badge-critical" style={{ animation: 'pulseDot 2s ease-in-out infinite' }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} /> Live
+            <span className={`badge ${isLive ? 'badge-low' : 'badge-elevated'}`}>
+              {isLive ? 'From backend' : 'Sample feed'}
             </span>
           </div>
           <div>
@@ -292,7 +321,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                       {item.time}
                     </span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#334155', letterSpacing: '0.06em' }}>{item.source}</span>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>· {item.type}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>· {item.corridor}</span>
                   </div>
                   <span className={`badge badge-${item.color}`}>{item.severity}</span>
                 </div>
@@ -302,42 +331,47 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                     <button className="btn-primary" onClick={e => { e.stopPropagation(); onNavigate?.('simulator'); }}>
                       <BarChart3 style={{ width: 14, height: 14 }} /> Run Scenario
                     </button>
-                    <button className="btn-secondary" onClick={e => e.stopPropagation()}>
-                      View Raw Intel
+                    <button className="btn-secondary" onClick={e => { e.stopPropagation(); onNavigate?.('risk'); }}>
+                      View in Risk Center
                     </button>
                   </div>
                 )}
               </div>
             ))}
+            {feedItems.length === 0 && (
+              <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{loading ? 'Loading events…' : 'No scoring events'}</div>
+            )}
           </div>
         </div>
 
         {/* Right Column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Strategic Reserves Status */}
+          {/* Composite Risk Breakdown (derived from live corridor scores) */}
           <div className="card" style={{ flex: 1 }}>
             <div className="card-header">
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0f172a' }}>Strategic Reserves Status</div>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0f172a' }}>Composite Risk Breakdown</div>
+              <span className={`badge badge-${compositeAlert}`}>{composite}/100 · {compositeAlert}</span>
             </div>
             <div style={{ padding: '8px 0' }}>
-              {[
-                { label: 'Refinery Slack Capacity', val: '85%',    color: '#22c55e', pct: 85 },
-                { label: 'VLCC Tanker Availability', val: '92%',   color: '#22c55e', pct: 92 },
-                { label: 'Emergency SPR Stock',      val: '9.5 Days', color: '#ef4444', pct: 32 },
-                { label: 'Pipeline Utilization',     val: '71%',   color: '#22c55e', pct: 71 },
-                { label: 'Forex Cover (Oil import)', val: '62 Days', color: '#22c55e', pct: 78 },
-              ].map((m, i) => (
-                <div key={i} style={{ padding: '14px 24px', borderBottom: i < 4 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{m.label}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 800, color: m.color }}>{m.val}</span>
+              {corridors.map((c, i) => {
+                const color = c.score > 70 ? '#ef4444' : c.score > 45 ? '#f97316' : c.score > 30 ? '#eab308' : '#22c55e';
+                return (
+                  <div key={c.corridor_id} style={{ padding: '14px 24px', borderBottom: i < corridors.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{c.name}{c.throughput ? ` · ${c.throughput}` : ''}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 800, color }}>{c.score.toFixed(1)}</span>
+                    </div>
+                    <div className="risk-bar-track">
+                      <div className="risk-bar-fill" style={{ width: `${c.score}%`, background: color }} />
+                    </div>
                   </div>
-                  <div className="risk-bar-track">
-                    <div className="risk-bar-fill" style={{ width: `${m.pct}%`, background: m.color }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+              {corridors.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>—</div>}
+              <div style={{ padding: '12px 24px', fontSize: 10, color: '#94a3b8', fontWeight: 500, lineHeight: 1.5 }}>
+                Composite = throughput-weighted mean of maritime chokepoint scores.
+              </div>
             </div>
           </div>
 
@@ -359,39 +393,23 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                 </span>
                 <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
               </button>
-              {/* Export PDF */}
               <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}
                 onClick={() => exportToPDF(
                   'Situation Report',
                   [
-                    { heading: 'Composite Risk Index', content: `Current score: 74/100 (+12 pts vs 7-day average). Alert Level 3 — Elevated. Primary driver: Strait of Hormuz corridor risk at 82/100 due to Iranian naval activity and AIS dark-shipping anomalies.` },
-                    { heading: 'Key Indicators', content: `Import Dependency: 88% of crude sourced from imports. Hormuz Transit: 42% of Indian crude imports. SPR Cover: 9.5 days (vs IEA 90-day benchmark). Brent Crude: ₹${(84.12 * 83.42).toFixed(2)}/bbl (+2.94% 24h).` },
-                    { heading: 'Active Alerts', content: `CRITICAL: Iran seizes second tanker in Hormuz within 48h; US Fifth Fleet raises posture. HIGH: Anti-ship missile fired near Bab-el-Mandeb transit zone. ELEVATED: Shipping congestion at South African bunkering ports due to diversion flows.` },
+                    { heading: 'Composite Risk Index', content: `Throughput-weighted composite: ${composite}/100 (${compositeAlert}). Top driver: ${topCorridor ? `${topCorridor.name} at ${topCorridor.score.toFixed(1)}/100 (${topCorridor.alert_level})` : 'n/a'}. Data source: ${isLive ? 'live backend' : 'offline sample'}.` },
+                    { heading: 'Reference Indicators', content: `Import Dependency: 88% (PPAC FY24-25). Hormuz Transit: ~42% of imports (PPAC). SPR Cover: 9.5 days (ISPRL). Brent: $${market?.brent_usd?.toFixed(2) ?? '—'}/bbl (${market?.is_live ? 'live FX' : 'reference'}).` },
+                    { heading: 'Corridor Scores', content: corridors.map(c => `${c.name}: ${c.score.toFixed(1)}/100 (${c.alert_level})`).join('. ') + '.' },
                   ],
-                  { headers: ['Corridor', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], rows: riskDataState.map(r => [r.name, r.score.toFixed(1), r.delta, r.vol, r.barrels]) },
-                  MOCK_RISK_SCORE.reasoning_trail
+                  {
+                    headers: ['Corridor', 'Risk Score', 'Alert', 'Volatility', 'Throughput'],
+                    rows: corridors.map(r => [r.name, r.score.toFixed(1), r.alert_level, r.volatility, r.throughput ?? '—']),
+                  },
+                  topCorridor?.reasoning_trail ?? ''
                 )}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <FileDown style={{ width: 18, height: 18, color: '#eab308' }} /> Export PDF Report
-                </span>
-                <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
-              </button>
-              {/* Export CSV */}
-              <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}
-                onClick={() => exportToCSV('PRAVAH_Corridor_Risk', ['Corridor', 'Short', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], riskDataState.map(r => [r.name, r.short, r.score.toFixed(1), r.delta, r.vol, r.barrels]))}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <FileText style={{ width: 18, height: 18, color: '#22c55e' }} /> Export CSV Data
-                </span>
-                <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
-              </button>
-              {/* Print */}
-              <button className="btn-secondary" style={{ width: '100%', justifyContent: 'space-between', padding: '13px 18px', fontSize: 13 }}
-                onClick={() => printReport('Situation Report')}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Printer style={{ width: 18, height: 18, color: '#3b82f6' }} /> Print Report
+                  <Zap style={{ width: 18, height: 18, color: '#eab308' }} /> Export Situation Report
                 </span>
                 <ChevronRight style={{ width: 18, height: 18, opacity: 0.5 }} />
               </button>

@@ -56,7 +56,9 @@ F. RELIABILITY RULE
 
 pravah/
 ├── README.md
-├── docker-compose.yml                 (spins up all services together)
+├── api.py                             PRODUCTION DEPLOYABLE — single-file
+│                                        monolith (all agents merged; native
+│                                        Render + Vercel, no containers)
 │
 ├── shared/                            (owned by whoever does Stage 1-3,
 │                                        frozen once Stage 4 begins)
@@ -71,7 +73,6 @@ pravah/
 │   ├── scoring/
 │   ├── tests/
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── main.py                        FastAPI service -> exposes
 │                                       POST /risk-score
 │
@@ -80,7 +81,6 @@ pravah/
 │   ├── simulations/
 │   ├── tests/
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── main.py                        exposes POST /simulate
 │
 ├── procurement-agent/                 MEMBER 3
@@ -88,14 +88,12 @@ pravah/
 │   ├── knowledge_graph/               (NetworkX graph lives here)
 │   ├── tests/
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── main.py                        exposes POST /recommend
 │
 ├── spr-agent/                         MEMBER 3 or 4 (pick based on load)
 │   ├── optimization/                  SciPy linear programming
 │   ├── tests/
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── main.py                        exposes POST /spr-schedule
 │
 ├── coordinator/                       built LAST, Stage 9 — nobody
@@ -118,10 +116,12 @@ pravah/
                                         microservice above by its
                                         contract, not its internals
 
-Why this shape works:
-   - Every agent is its own FastAPI microservice with its own
-     requirements.txt and Dockerfile — one person's broken dependency
-     never blocks anyone else.
+Why this shape worked during the build (each agent developed in isolation),
+and how it ships now:
+   - During development every agent was its own FastAPI service with its own
+     requirements.txt — one person's broken dependency never blocked anyone else.
+   - For PRODUCTION those agents are merged into the single-file `api.py`
+     monolith and deployed natively (Render + Vercel). No containers are used.
    - The "shared/schemas" folder is the one place that needs agreement
      up front (Stage 4). Once it's frozen, every folder can be built,
      tested, and demoed completely in isolation, using mock data that
@@ -316,8 +316,7 @@ AIS Ship Data    | aisstream.io + AISHub
 Sanctions        | OFAC SDN list
 India Gov Data   | PPAC/MoP scraper + CSV cache
 Optimization     | SciPy
-Containerization | Docker + docker-compose (one container per folder)
-Deployment       | Vercel (frontend) + Railway (services) + Supabase
+Deployment       | Render (native Python, api.py) + Vercel (Next.js). No containers.
 
 ================================================================================
 8. WHAT MAKES THIS STAND OUT
