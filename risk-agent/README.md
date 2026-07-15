@@ -11,7 +11,7 @@ ingest → classify → map_corridor → severity → score → store
 ## Contract
 
 `POST /risk-score` — body is the frozen `RiskScoreRequest`, response is the
-frozen `RiskScoreResponse` (both from `shared/schemas/risk_score.py`).
+frozen `RiskScoreResponse` (both from `shared/contracts/risk_score.py`).
 
 ```jsonc
 // request

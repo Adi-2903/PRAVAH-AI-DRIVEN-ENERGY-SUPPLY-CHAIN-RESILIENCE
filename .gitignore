@@ -17,3 +17,6 @@ venv/
 *.csv
 *cache.json
 eia_cache.json
+next-env.d.ts
+tsconfig.tsbuildinfo
+.tsbuildinfo
