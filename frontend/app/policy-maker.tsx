@@ -64,7 +64,7 @@ function LoginModal({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
     setErr('');
     setTimeout(() => {
-      if (user === 'pm@pravah.gov' && pass === 'Hormuz@2026') {
+      if (user.trim() === 'pm@pravah.gov' && pass.trim() === 'Hormuz@2026') {
         localStorage.setItem('pravah_access_token', 'mock_demo_token');
         onLogin();
       } else {
@@ -173,13 +173,40 @@ export default function PolicyMaker() {
   const [generated, setGenerated] = useState(false);
   const [policies, setPolicies] = useState<typeof AI_POLICIES>([]);
 
-  const generate = () => {
+  const generate = async () => {
     setGenerating(true);
-    setTimeout(() => {
-      setPolicies(AI_POLICIES);
+    try {
+      const res = await postJSON<any>('coordinator', '/generate-policy', {});
+      const apiPolicies = res.actions.map((a: any, i: number) => {
+        let icon = Star;
+        let color = '#8b5cf6';
+        let bg = 'rgba(139,92,246,0.08)';
+        let border = 'rgba(139,92,246,0.2)';
+        
+        if (a.impact === 'critical') { icon = Shield; color = '#ef4444'; bg = 'rgba(239,68,68,0.08)'; border = 'rgba(239,68,68,0.2)'; }
+        else if (a.impact === 'high') { icon = TrendingUp; color = '#f97316'; bg = 'rgba(249,115,22,0.08)'; border = 'rgba(249,115,22,0.2)'; }
+        else if (a.impact === 'moderate' || a.impact === 'elevated') { icon = Zap; color = '#eab308'; bg = 'rgba(234,179,8,0.08)'; border = 'rgba(234,179,8,0.2)'; }
+        else { icon = CheckCircle; color = '#22c55e'; bg = 'rgba(34,197,94,0.08)'; border = 'rgba(34,197,94,0.2)'; }
+        
+        return {
+          id: i + 1,
+          priority: (a.impact === 'critical' ? 'CRITICAL' : a.impact === 'high' ? 'HIGH' : a.impact === 'moderate' ? 'ELEVATED' : 'LOW'),
+          category: a.category,
+          title: a.title,
+          description: a.description,
+          outcome: a.outcome,
+          timeline: a.timeline,
+          icon, color, bg, border
+        };
+      });
+      setPolicies(apiPolicies);
+    } catch (e) {
+      console.error(e);
+      setPolicies(AI_POLICIES); // Fallback to mock on error
+    } finally {
       setGenerated(true);
       setGenerating(false);
-    }, 2200);
+    }
   };
 
   if (!authed) return <LoginModal onLogin={() => setAuthed(true)} />;

@@ -5,6 +5,7 @@ import { ComposableMap, Geographies, Geography, Marker, Line, ZoomableGroup } fr
 import { ArrowDown, ArrowUp, Zap, ShieldAlert, Clock, RefreshCw, ChevronRight, ChevronLeft, Wifi, WifiOff, Trophy, Medal, Award, FileDown } from "lucide-react";
 import { exportProcurementReport } from './lib/export';
 import { serviceUrl, postJSON } from './lib/api';
+import { useLiveData } from './lib/use-live-data';
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
@@ -103,12 +104,12 @@ export default function ProcurementModule() {
   const [transitWeight, setTransitWeight] = useState(0.2);
   const [recs, setRecs] = useState<Rec[]>([]);
   const [baseline, setBaseline] = useState<Baseline | null>(null);
-  const [market, setMarket] = useState<Market | null>(null);
+  
+  const { market, corridors, refresh, loading: liveLoading, error: liveError, lastUpdated } = useLiveData();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [rightOpen, setRightOpen] = useState(true);
-  const [lastComputed, setLastComputed] = useState("");
   const [selectedRec, setSelectedRec] = useState(0);
 
   const handleWeight = (type: string, val: number) => {
@@ -122,9 +123,11 @@ export default function ProcurementModule() {
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
     try {
+      const liveHormuzRisk = corridors.find(c => c.corridor_id === 'hormuz')?.score ?? 78;
+      
       const data = await postJSON<any>('procurement', '/recommend', {
           current_supplier: "SAU_ARAMCO",
-          current_corridor_risk_score: 78,
+          current_corridor_risk_score: liveHormuzRisk,
           target_refinery: "REF_JAMNAGAR",
           required_crude_grade: "GRADE_MEDIUM_SOUR",
           cost_weight: costWeight,
@@ -135,8 +138,6 @@ export default function ProcurementModule() {
         });
       setRecs(data.recommendations || []);
       setBaseline(data.current_supplier_baseline);
-      setMarket(data.market_data || null);
-      setLastComputed(data.computed_at);
       setSelectedRec(0);
       setIsOffline(false);
     } catch (err: any) {
@@ -148,14 +149,17 @@ export default function ProcurementModule() {
       // Backend unreachable — degrade to bundled sample data (never a blank screen).
       setRecs(PROCUREMENT_FALLBACK.recommendations);
       setBaseline(PROCUREMENT_FALLBACK.current_supplier_baseline);
-      setMarket(PROCUREMENT_FALLBACK.market_data);
-      setLastComputed(new Date().toISOString());
       setSelectedRec(0);
       setIsOffline(true);
     } finally { setLoading(false); }
-  }, [costWeight, riskWeight, transitWeight, market]);
+  }, [costWeight, riskWeight, transitWeight, market, corridors]);
 
-  useEffect(() => { const t = setTimeout(fetchData, 500); return () => clearTimeout(t); }, [fetchData]);
+  useEffect(() => {
+    if (!liveLoading) {
+      const t = setTimeout(fetchData, 500); 
+      return () => clearTimeout(t);
+    }
+  }, [fetchData, liveLoading]);
 
   const active = recs[selectedRec];
 
@@ -205,6 +209,9 @@ export default function ProcurementModule() {
               <span style={{ fontSize:9, fontWeight:700, color: market.is_live?"#10b981":"#94a3b8", textTransform:"uppercase", letterSpacing:"0.07em" }}>
                 {market.is_live ? "Live Prices" : "Static Prices"}
               </span>
+              <button onClick={refresh} disabled={liveLoading} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 9, fontWeight: 700 }}>
+                <Clock size={10} className={liveLoading ? "animate-spin" : ""} /> Refresh
+              </button>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
               {[
@@ -295,9 +302,9 @@ export default function ProcurementModule() {
         )}
 
         {/* Error */}
-        {error && !loading && (
-          <div style={{ position:"absolute", top:12, left:"50%", transform:"translateX(-50%)", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 16px", fontSize:11, color:"#dc2626", fontWeight:600, maxWidth:340, textAlign:"center" }}>
-            ⚠ Backend error: {error}
+        {(error || liveError) && !loading && (
+          <div style={{ position:"absolute", top:12, left:"50%", transform:"translateX(-50%)", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 16px", fontSize:11, color:"#dc2626", fontWeight:600, maxWidth:400, textAlign:"center" }}>
+            ⚠ Backend error: {error || liveError}
           </div>
         )}
 
@@ -325,9 +332,9 @@ export default function ProcurementModule() {
         )}
 
         {/* Timestamp */}
-        {lastComputed && (
+        {lastUpdated && (
           <div style={{ position:"absolute", top:12, right:12, background:"rgba(255,255,255,0.85)", backdropFilter:"blur(6px)", borderRadius:6, padding:"4px 8px", fontSize:9, color:"#94a3b8", border:"1px solid #e2e8f0" }}>
-            {new Date(lastComputed).toLocaleTimeString()}
+            Last Updated: {new Date(lastUpdated).toLocaleTimeString('en-IN', { hour12: false })} IST
           </div>
         )}
       </div>

@@ -112,7 +112,7 @@ function mockCorridors(): LiveCorridor[] {
 /** Fetch REAL per-corridor risk from the backend. Never throws. */
 export async function loadCorridors(): Promise<{ data: LiveCorridor[]; is_live: boolean; as_of: string }> {
   try {
-    const res = await fetch(serviceUrl('risk', '/corridors'), { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(serviceUrl('risk', '/corridors?live=true'), { signal: AbortSignal.timeout(6000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rows: BackendRisk[] = await res.json();
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('empty');

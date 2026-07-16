@@ -38,6 +38,8 @@ from typing import List, Optional, Literal
 import numpy as np
 import networkx as nx
 import httpx
+import json
+import google.generativeai as genai
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, model_validator
@@ -1009,7 +1011,7 @@ def _spr_schedule(req: SPRScheduleRequest) -> SPRScheduleResponse:
         optimized_cost_usd=round(optimized_cost, 2),
         savings_usd=round(savings, 2),
         savings_pct=round(savings_pct, 2),
-        reserve_never_below_floor=bool(current_res >= req.min_safety_floor_days - 1e-5),
+        reserve_never_below_floor=(current_res >= req.min_safety_floor_days - 1e-5),
         computed_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     )
 
@@ -1283,7 +1285,7 @@ async def _recommend(req: RecommendRequest) -> RecommendResponse:
 
     b_score = composite(baseline_cand)
     baseline_out = Baseline(
-        supplier=baseline_cand["supplier"], estimated_cost_usd_per_bbl=baseline_cand["estimated_cost_usd_per_bbl"],
+        supplier=str(baseline_cand["supplier"]), estimated_cost_usd_per_bbl=baseline_cand["estimated_cost_usd_per_bbl"],
         transit_days=baseline_cand["transit_days"], corridor_risk_score=baseline_cand["corridor_risk_score"],
         composite_score=b_score,
     )
@@ -1565,7 +1567,7 @@ def _run_risk_pipeline(corridor: str, as_of: datetime, use_live: bool = False):
 
     # classify + map corridor + severity
     for e in raw:
-        e["relevant"] = _risk_is_relevant(e.get("headline"))
+        e["relevant"] = _risk_is_relevant(e.get("headline", ""))
         e["corridor"] = _risk_assign_corridor(e, corridor)
         e["severity"] = _risk_severity(e)
 
@@ -1627,9 +1629,11 @@ def build_risk_response(corridor: str, as_of: Optional[datetime] = None, use_liv
         for e in top
     ]
     model = "gemini-2.5-flash" if os.getenv("GEMINI_API_KEY") else "heuristic-keyword-v1"
+    import typing
+    alert_level_typed = typing.cast(Literal['critical', 'elevated', 'high', 'low'], result["alert_level"])
     return RiskScoreResponse(
         corridor=corridor, score=result["score"], confidence=result["confidence"],
-        alert_level=result["alert_level"], signals=signals,
+        alert_level=alert_level_typed, signals=signals,
         reasoning_trail=" ".join(result["reasoning_trail"]), key_events=key_events,
         computed_at=datetime.now(timezone.utc), data_sources=sources or ["fixtures"], model=model,
     )
@@ -1869,6 +1873,71 @@ def corridors(live: bool = False):
 @_inner.post("/final-recommendation", response_model=FinalRecommendationResponse)
 async def final_recommendation(req: FinalRecommendationRequest):
     return await _coordinate(req)
+
+
+# ── policy maker route ──────────────────────────────────────────────────────
+class PolicyAction(BaseModel):
+    id: str
+    title: str
+    description: str
+    outcome: str
+    timeline: str
+    category: str
+    impact: str
+
+class GeneratePolicyResponse(BaseModel):
+    summary: str
+    actions: List[PolicyAction]
+    confidence: float
+
+@_inner.post("/generate-policy", response_model=GeneratePolicyResponse)
+async def generate_policy():
+    try:
+        corridors = [build_risk_response(c, use_live=True) for c in ("hormuz", "redsea", "cape", "domestic")]
+        market = await fetch_live_market_data()
+        
+        # We need the final recommendation summary as well
+        rec_req = FinalRecommendationRequest(corridor="hormuz")
+        recommendation = await _coordinate(rec_req)
+
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            raise ValueError("GEMINI_API_KEY not configured")
+        
+        genai.configure(api_key=gemini_api_key)
+        model = genai.GenerativeModel("gemini-2.5-flash", generation_config={"response_mime_type": "application/json"})
+        
+        prompt = f"""
+        Act as the Indian Ministry of Petroleum's AI advisor.
+        Current Market: Brent ${market["brent_usd"]}
+        Risk Scores: Hormuz {corridors[0].score}, Red Sea {corridors[1].score}
+        Backend AI Recommendation: {recommendation.summary}
+        
+        Generate 3 high-impact policy actions to mitigate energy supply chain risks based on this live intelligence.
+        Format the output strictly as JSON with this schema:
+        {{
+            "summary": "Brief executive summary of the situation",
+            "actions": [
+                {{
+                    "id": "POL-1",
+                    "title": "Title of action",
+                    "description": "Detailed description",
+                    "outcome": "Expected outcome",
+                    "timeline": "Immediate / 30 Days / etc",
+                    "category": "SPR / Procurement / Diplomatic",
+                    "impact": "critical"
+                }}
+            ],
+            "confidence": 0.95
+        }}
+        """
+        
+        response = model.generate_content(prompt)
+        result = json.loads(response.text)
+        return GeneratePolicyResponse(**result)
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Vercel entrypoint ────────────────────────────────────────────────────

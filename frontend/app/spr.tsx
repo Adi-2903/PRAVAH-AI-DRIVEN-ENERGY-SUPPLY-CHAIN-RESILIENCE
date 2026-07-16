@@ -10,6 +10,7 @@ import { exportSPRScheduleCSV } from './lib/export';
 import { serviceUrl } from './lib/api';
 import { loadCorridors } from './lib/live-data';
 import type { LiveCorridor } from './lib/live-data';
+import { useLiveData } from './lib/use-live-data';
 
 const SPR_CORRIDORS = [
   { id: 'hormuz', label: 'Strait of Hormuz' },
@@ -85,7 +86,8 @@ export default function SPROptimizer() {
   const [floor, setFloor] = useState(3.0);
   const [maxDrawdown, setMaxDrawdown] = useState(1.0);
   const [corridor, setCorridor] = useState('hormuz');
-  const [corridors, setCorridors] = useState<LiveCorridor[]>([]);
+  const { market, corridors, refresh, loading: liveLoading, error: liveError, lastUpdated } = useLiveData();
+  
   const [result, setResult] = useState<SPRScheduleResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [isMock, setIsMock] = useState(false);
@@ -93,9 +95,6 @@ export default function SPROptimizer() {
 
   const currentReserve = 9.5;  // ISPRL published reference cover (days)
   const corridorRisk = corridors.find(c => c.corridor_id === corridor)?.score ?? 78;
-
-  // Load real corridor risk scores once (used as the SPR risk input, not synthetic).
-  useEffect(() => { loadCorridors().then(({ data }) => setCorridors(data)); }, []);
 
   const fetchOptimization = useCallback(async () => {
     setLoading(true);
@@ -109,7 +108,7 @@ export default function SPROptimizer() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           risk_score: corridorRisk, corridor, shock_duration_days: horizon,
-          num_simulations: 4000, current_brent_usd: 84.0,
+          num_simulations: 4000, current_brent_usd: market?.brent_usd ?? 84.0,
           elasticity_assumptions: { price_elasticity_of_demand: -0.05, pass_through_rate_to_pump: 0.6, gdp_sensitivity_per_10pct_oil_shock: -0.15 },
         }),
         signal: AbortSignal.timeout(8000),
@@ -173,9 +172,11 @@ export default function SPROptimizer() {
   }, [horizon, floor, maxDrawdown, currentReserve, corridor, corridorRisk]);
 
   useEffect(() => {
-    const handler = setTimeout(fetchOptimization, 400);
-    return () => clearTimeout(handler);
-  }, [fetchOptimization]);
+    if (!liveLoading) {
+      const handler = setTimeout(fetchOptimization, 400);
+      return () => clearTimeout(handler);
+    }
+  }, [fetchOptimization, liveLoading]);
 
   return (
     <div style={{ background: '#020617', minHeight: '100%', padding: '28px 32px', color: '#f8fafc' }}>
@@ -192,6 +193,9 @@ export default function SPROptimizer() {
           <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 8, fontWeight: 500 }}>
             LP solver · price path from live scenario engine, risk from live corridor scoring
           </p>
+          {lastUpdated && (
+            <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>Last Updated: {new Date(lastUpdated).toLocaleTimeString('en-IN', { hour12: false })} IST</div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           <div>
@@ -215,8 +219,18 @@ export default function SPROptimizer() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: inputsLive ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', border: `1px solid ${inputsLive ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.2)'}`, padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: inputsLive ? '#34d399' : '#fbbf24' }}>
             {inputsLive ? <><Wifi style={{ width: 14, height: 14 }} /> Live inputs</> : <><WifiOff style={{ width: 14, height: 14 }} /> Offline inputs</>}
           </div>
+          <button onClick={refresh} disabled={liveLoading} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            <Clock style={{ width: 14, height: 14, animation: liveLoading ? 'spin 1s linear infinite' : 'none' }} /> Refresh
+          </button>
         </div>
       </div>
+
+      {liveError && (
+        <div style={{ marginBottom: 24, padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, color: '#f87171', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <WifiOff style={{ width: 16, height: 16 }} />
+          ⚠ Live market unavailable - Using cached data. ({liveError})
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: 24 }}>
         

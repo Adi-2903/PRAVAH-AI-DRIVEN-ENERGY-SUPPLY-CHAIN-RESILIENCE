@@ -1,7 +1,7 @@
-================================================================================
+============================================================
 PRAVAH: AI-DRIVEN ENERGY SUPPLY CHAIN RESILIENCE
 BUILD PLAN
-================================================================================
+============================================================
 Theme: Supply Chain Intelligence / Energy Security / Geopolitical Risk
 
 Think of this as an operating system for India's energy supply chain — not

@@ -5,8 +5,9 @@ import { Shield, TrendingUp, Fuel, Clock, ChevronRight, Activity } from 'lucide-
 import { MOCK_COORDINATOR } from './lib/mock-data';
 import type { CoordinatorResponse } from './lib/mock-data';
 import { postWithFallback } from './lib/api';
-import { loadCorridors, loadMarket, compositeIndex } from './lib/live-data';
+import { compositeIndex } from './lib/live-data';
 import type { LiveCorridor, MarketData } from './lib/live-data';
+import { useLiveData } from './lib/use-live-data';
 import DataFreshness from './components/data-freshness';
 
 /* ─── Animated Risk Gauge ──────────────────────── */
@@ -154,16 +155,13 @@ function SimpleMap({ corridors }: { corridors: LiveCorridor[] }) {
 /* ─── Main Citizen View ──────────────────────── */
 export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) {
   const [coord, setCoord] = useState<CoordinatorResponse>(MOCK_COORDINATOR);
-  const [corridors, setCorridors] = useState<LiveCorridor[]>([]);
-  const [market, setMarket] = useState<MarketData | null>(null);
+  const { market, corridors, refresh, loading: liveLoading, error: liveError, lastUpdated } = useLiveData();
   const [time, setTime] = useState('');
 
   useEffect(() => {
-    // Coordinator blend for the plain-English summary; corridors for the index+map; market for prices.
+    // Coordinator blend for the plain-English summary.
     postWithFallback<CoordinatorResponse>('coordinator', '/final-recommendation', { corridor: 'hormuz' }, MOCK_COORDINATOR)
       .then(({ data }) => setCoord(data));
-    loadCorridors().then(({ data }) => setCorridors(data));
-    loadMarket().then(({ data }) => setMarket(data));
   }, []);
 
   useEffect(() => {
@@ -220,7 +218,14 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
             fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
             color: 'rgba(148,163,184,0.6)', background: 'rgba(255,255,255,0.04)',
             padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)',
-          }}>{time} IST</span>
+          }}>Last Updated: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString('en-IN', { hour12: false }) : time} IST</span>
+          <button onClick={refresh} disabled={liveLoading} style={{
+            background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8',
+            fontSize: 10, fontWeight: 600, padding: '4px 8px', borderRadius: 6, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 4
+          }}>
+            <Clock style={{ width: 12, height: 12, animation: liveLoading ? 'spin 1s linear infinite' : 'none' }} />
+          </button>
         </div>
       </header>
 
@@ -230,6 +235,11 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
         justifyContent: 'center', padding: '40px 32px 60px',
         maxWidth: 900, margin: '0 auto', width: '100%',
       }}>
+        {liveError && (
+          <div style={{ width: '100%', marginBottom: 32, padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, color: '#f87171', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
+            ⚠ Live backend unavailable - Using cached data. ({liveError})
+          </div>
+        )}
 
         {/* Risk Score Gauge */}
         <div className="fade-in" style={{ marginBottom: 32, textAlign: 'center' }}>
@@ -280,7 +290,7 @@ export default function CitizenView({ onGoDeeper }: { onGoDeeper: () => void }) 
           width: '100%', marginBottom: 16, animationDelay: '0.45s',
         }}>
           {[
-            { icon: TrendingUp, label: 'Brent Crude', value: market ? `$${market.brent_usd.toFixed(2)}` : '—', sub: 'EIA reference spot', color: '#ef4444', live: false },
+            { icon: TrendingUp, label: 'Brent Crude', value: market ? `$${market.brent_usd.toFixed(2)}` : '—', sub: 'EIA reference spot', color: '#ef4444', live: market?.is_live ?? false },
             { icon: Fuel, label: 'Import Dependency', value: '88%', sub: 'PPAC FY24-25', color: '#3b82f6', live: false },
             { icon: Shield, label: 'SPR Cover', value: '9.5 days', sub: 'ISPRL', color: '#eab308', live: false },
             { icon: Activity, label: 'Crude Import Bill', value: '$137B', sub: 'PPAC FY24-25', color: '#8b5cf6', live: false },

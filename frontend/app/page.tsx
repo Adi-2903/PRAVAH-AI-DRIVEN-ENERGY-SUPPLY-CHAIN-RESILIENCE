@@ -25,8 +25,9 @@ import RiskIntelligence from './risk-intelligence';
 import CitizenView from './citizen-view';
 import PolicyMaker from './policy-maker';
 import DigitalTwin from './digital-twin';
-import { loadCorridors, loadMarket, compositeIndex, alertLevelFor } from './lib/live-data';
+import { alertLevelFor } from './lib/live-data';
 import type { MarketData } from './lib/live-data';
+import { useLiveData } from './lib/use-live-data';
 
 type ViewTier = 'citizen' | 'analyst' | 'policy';
 
@@ -143,9 +144,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [viewTier, setViewTier] = useState<ViewTier>('citizen');
   const [time, setTime] = useState('');
-  const [composite, setComposite] = useState<number | null>(null);
-  const [market, setMarket] = useState<MarketData | null>(null);
-  const [isLive, setIsLive] = useState(false);
+  const { market, compositeRisk: composite, marketLive, corridorsLive, refresh: liveRefresh, lastUpdated, error: liveError } = useLiveData();
+  const isLive = marketLive && corridorsLive;
 
   // Switching to the Policy tier opens the Policy Maker tab; leaving it returns to the dashboard.
   const handleTierSwitch = (t: ViewTier) => {
@@ -159,21 +159,6 @@ export default function App() {
     update();
     const t = setInterval(update, 1000);
     return () => clearInterval(t);
-  }, []);
-
-  // Live composite risk index + market prices for the shell header/sidebar.
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const [c, m] = await Promise.all([loadCorridors(), loadMarket()]);
-      if (cancelled) return;
-      setComposite(compositeIndex(c.data));
-      setMarket(m.data);
-      setIsLive(c.is_live);
-    };
-    load();
-    const t = setInterval(load, 60000); // refresh every minute
-    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
   const compositeAlert = composite != null ? alertLevelFor(composite) : 'low';
@@ -382,18 +367,36 @@ export default function App() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <TierSwitcher tier={viewTier} onSwitch={handleTierSwitch} />
+              
+              {/* Bloomberg-style HUD */}
               <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#64748b',
-                background: '#f8fafc',
-                padding: '5px 12px',
-                borderRadius: 8,
-                border: '1px solid rgba(0,0,0,0.07)',
-                letterSpacing: '0.05em',
+                display: 'flex', alignItems: 'center', gap: 16,
+                background: '#f8fafc', padding: '6px 16px', borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.07)', fontSize: 10, fontWeight: 700,
+                color: '#64748b', letterSpacing: '0.04em', textTransform: 'uppercase'
               }}>
-                {time} IST
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span>Backend</span>
+                  <span style={{ color: liveError ? '#ef4444' : '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span className={liveError ? '' : 'pulse-dot'} style={{ width: 6, height: 6, borderRadius: '50%', background: liveError ? '#ef4444' : '#10b981' }} />
+                    {liveError ? 'ERROR' : 'HEALTHY'}
+                  </span>
+                </div>
+                <div style={{ width: 1, height: 20, background: 'rgba(0,0,0,0.06)' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span>Last Sync</span>
+                  <span style={{ color: '#0f172a' }}>{lastUpdated ? new Date(lastUpdated).toLocaleTimeString('en-IN', { hour12: false }) : time}</span>
+                </div>
+                <div style={{ width: 1, height: 20, background: 'rgba(0,0,0,0.06)' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span>Market</span>
+                  <span style={{ color: marketLive ? '#10b981' : '#f59e0b' }}>{marketLive ? 'LIVE' : 'CACHED'}</span>
+                </div>
+                <div style={{ width: 1, height: 20, background: 'rgba(0,0,0,0.06)' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span>Risk</span>
+                  <span style={{ color: corridorsLive ? '#10b981' : '#f59e0b' }}>{corridorsLive ? 'LIVE' : 'CACHED'}</span>
+                </div>
               </div>
             </div>
           </div>

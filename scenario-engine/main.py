@@ -5,13 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from shared.contracts.simulate import (
-    SimulateRequest,
-    SimulateResponse,
-    DailyPricePoint,
-    PumpPriceImpact,
-    GdpImpactPct,
-    PriceDistribution,
+from shared.contracts.simulate import (SimulateRequest,    SimulateResponse,    DailyPricePoint,    PumpPriceImpact,    GdpImpactPct,    PriceDistribution,
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
