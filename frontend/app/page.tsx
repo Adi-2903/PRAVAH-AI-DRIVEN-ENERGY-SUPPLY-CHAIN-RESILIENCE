@@ -33,7 +33,7 @@ const TABS = [
 const BASE_TICKERS = [
   { sym: 'BRENT',     base: 84.12, prefix: '$',  suffix: '/bbl', decimals: 2 },
   { sym: 'WTI',       base: 80.55, prefix: '$',  suffix: '/bbl', decimals: 2 },
-  { sym: 'USD/INR',   base: 83.42, prefix: '₹',  suffix: '',     decimals: 2 },
+  { sym: 'USD/INR',   base: 83.42, prefix: '',   suffix: '',     decimals: 2, isPair: true },
   { sym: 'INDIA-IMP', base: 81.04, prefix: '$',  suffix: '/bbl', decimals: 2 },
   { sym: 'NAT-GAS',   base: 2.81,  prefix: '$',  suffix: '/mmbtu', decimals: 2 },
   { sym: 'DUBAI',     base: 82.90, prefix: '$',  suffix: '/bbl', decimals: 2 },
@@ -202,7 +202,7 @@ export default function App() {
               <div style={{ height: 4, borderRadius: 4, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: 6 }}>
                 <div style={{ height: '100%', width: `${riskScore}%`, borderRadius: 4, background: riskScore > 70 ? 'linear-gradient(90deg, #eab308, #ef4444)' : '#22c55e', transition: 'width 1s ease' }} />
               </div>
-              <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.45)', fontWeight: 600 }}>Live · auto-refreshes</div>
+              <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.45)', fontWeight: 600 }}>Simulated · auto-refreshes</div>
             </div>
           </div>
 
@@ -262,7 +262,7 @@ export default function App() {
               <span style={{ color: 'rgba(255,255,255,0.35)' }}>|</span>
               <span>CRI: <span style={{ fontFamily: 'var(--font-mono)', color: '#fde68a' }}>{riskScore}/100</span></span>
               <span style={{ color: 'rgba(255,255,255,0.35)' }}>|</span>
-              <span>Brent: <span style={{ fontFamily: 'var(--font-mono)', color: tickers[0]?.up ? '#86efac' : '#fca5a5' }}>${tickers[0]?.val?.toFixed(2) ?? '84.12'} {tickers[0]?.up ? '▲' : '▼'}</span></span>
+              <span>Brent: <span style={{ fontFamily: 'var(--font-mono)', color: tickers[0]?.up ? '#86efac' : '#fca5a5' }}>${tickers[0]?.val?.toFixed(2) ?? '84.12'}/bbl {tickers[0]?.up ? '▲' : '▼'}</span></span>
             </div>
             {/* Right: scrolling ticker strip */}
             <div style={{ flex: 1, overflow: 'hidden', maxWidth: 560, maskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)' }}>
@@ -270,7 +270,7 @@ export default function App() {
                 {[...tickers, ...tickers].map((t, i) => (
                   <span key={i} style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.8)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ color: 'rgba(255,255,255,0.45)', fontWeight: 700, fontSize: 9 }}>{t.sym}</span>
-                    <span>{t.prefix}{t.val?.toFixed(t.decimals)}</span>
+                    <span>{t.isPair ? `${t.sym}: ` : ''}{t.prefix}{t.val?.toFixed(t.decimals)}{t.suffix}</span>
                     <span style={{ color: t.up ? '#86efac' : '#fca5a5', fontSize: 9 }}>{t.up ? '+' : ''}{t.chg?.toFixed(2)}%</span>
                   </span>
                 ))}

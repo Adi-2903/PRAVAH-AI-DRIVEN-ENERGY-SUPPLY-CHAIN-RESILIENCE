@@ -154,6 +154,14 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
               <circle cx="175" cy="152" r="7" fill="#f97316" opacity="0.9" />
               <rect x="100" y="160" rx="4" ry="4" width="108" height="20" fill="#0f172a" opacity="0.85" />
               <text x="105" y="173" fill="#fdba74" fontSize="9" fontWeight="bold" fontFamily="sans-serif">Bab-el-Mandeb · HIGH</text>
+              
+              {/* Suez Canal */}
+              <circle cx="160" cy="110" r="6" fill="#eab308" opacity="0.9" />
+              <text x="100" y="105" fill="#fde047" fontSize="9" fontWeight="bold" fontFamily="sans-serif">Suez Canal · ELEVATED</text>
+              
+              {/* Cape of Good Hope */}
+              <circle cx="120" cy="350" r="6" fill="#22c55e" opacity="0.9" />
+              <text x="130" y="355" fill="#4ade80" fontSize="9" fontWeight="bold" fontFamily="sans-serif">Cape of Good Hope · LOW</text>
 
               {/* Malacca */}
               <circle cx="553" cy="248" r="6" fill="#22c55e" opacity="0.9" />
@@ -226,14 +234,14 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                     <td>
                       <span style={{
                         fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700,
-                        color: row.trend === 'up' ? '#ef4444' : row.trend === 'down' ? '#22c55e' : '#94a3b8',
+                        color: (row.trend === 'up' || (row.delta && row.delta.startsWith('+'))) ? '#ef4444' : (row.trend === 'down' || (row.delta && row.delta.startsWith('-'))) ? '#22c55e' : '#94a3b8',
                         display: 'flex', alignItems: 'center', gap: 4
                       }}>
-                        {row.trend === 'up' ? '▲' : row.trend === 'down' ? '▼' : '━'} {row.delta}
+                        {(row.trend === 'up' || (row.delta && row.delta.startsWith('+'))) ? '▲' : (row.trend === 'down' || (row.delta && row.delta.startsWith('-'))) ? '▼' : '━'} {row.delta}
                       </span>
                     </td>
                     <td>
-                      <span className={`badge badge-${row.vol === 'Very High' ? 'critical' : row.vol === 'High' ? 'high' : 'low'}`}>
+                      <span className={`badge badge-${row.vol === 'Very High' ? 'critical' : row.vol === 'High' ? 'high' : row.vol === 'Moderate' ? 'elevated' : 'low'}`}>
                         {row.vol}
                       </span>
                     </td>
@@ -272,7 +280,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>News · AIS · Sanctions · Market</div>
             </div>
             <span className="badge badge-critical" style={{ animation: 'pulseDot 2s ease-in-out infinite' }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} /> Live
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} /> Simulated Feed
             </span>
           </div>
           <div>
@@ -324,9 +332,9 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
               {[
                 { label: 'Refinery Slack Capacity', val: '85%',    color: '#22c55e', pct: 85 },
                 { label: 'VLCC Tanker Availability', val: '92%',   color: '#22c55e', pct: 92 },
-                { label: 'Emergency SPR Stock',      val: '9.5 Days', color: '#ef4444', pct: 32 },
+                { label: 'Emergency SPR Stock',      val: '9.5 days', color: '#ef4444', pct: 32 },
                 { label: 'Pipeline Utilization',     val: '71%',   color: '#22c55e', pct: 71 },
-                { label: 'Forex Cover (Oil import)', val: '62 Days', color: '#22c55e', pct: 78 },
+                { label: 'Forex Cover (Oil import)', val: '62 days', color: '#22c55e', pct: 78 },
               ].map((m, i) => (
                 <div key={i} style={{ padding: '14px 24px', borderBottom: i < 4 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -365,7 +373,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: string) =
                   'Situation Report',
                   [
                     { heading: 'Composite Risk Index', content: `Current score: 74/100 (+12 pts vs 7-day average). Alert Level 3 — Elevated. Primary driver: Strait of Hormuz corridor risk at 82/100 due to Iranian naval activity and AIS dark-shipping anomalies.` },
-                    { heading: 'Key Indicators', content: `Import Dependency: 88% of crude sourced from imports. Hormuz Transit: 42% of Indian crude imports. SPR Cover: 9.5 days (vs IEA 90-day benchmark). Brent Crude: ₹${(84.12 * 83.42).toFixed(2)}/bbl (+2.94% 24h).` },
+                    { heading: 'Key Indicators', content: `Import Dependency: 88% of crude sourced from imports. Hormuz Transit: 42% of Indian crude imports. SPR Cover: 9.5 days (vs IEA 90-day benchmark). Brent Crude: $84.12/bbl (+2.94% 24h).` },
                     { heading: 'Active Alerts', content: `CRITICAL: Iran seizes second tanker in Hormuz within 48h; US Fifth Fleet raises posture. HIGH: Anti-ship missile fired near Bab-el-Mandeb transit zone. ELEVATED: Shipping congestion at South African bunkering ports due to diversion flows.` },
                   ],
                   { headers: ['Corridor', 'Risk Score', '24h Change', 'Volatility', 'Throughput'], rows: riskDataState.map(r => [r.name, r.score.toFixed(1), r.delta, r.vol, r.barrels]) },
