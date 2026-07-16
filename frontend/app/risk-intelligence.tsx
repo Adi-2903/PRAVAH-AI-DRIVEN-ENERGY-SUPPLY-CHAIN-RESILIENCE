@@ -1,22 +1,23 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   AlertTriangle, Radio, Ship, Gavel, TrendingUp,
-  Filter, ChevronDown, ChevronUp, AlertCircle
+  Filter, ChevronDown, ChevronUp, AlertCircle, Wifi, WifiOff, RefreshCw
 } from 'lucide-react';
-import { CORRIDOR_RISK_DATA, LIVE_SIGNALS } from './lib/mock-data';
-import type { CorridorRiskData, LiveSignal } from './lib/mock-data';
+import type { LiveSignal } from './lib/mock-data';
+import { loadCorridors, feedFromCorridors } from './lib/live-data';
+import type { LiveCorridor } from './lib/live-data';
 import DataFreshness from './components/data-freshness';
 import ReasoningTrail from './components/reasoning-trail';
 
 /* ─── Corridor Risk Card ──────────────────────── */
 function CorridorCard({ data, isSelected, onClick }: {
-  data: CorridorRiskData; isSelected: boolean; onClick: () => void;
+  data: LiveCorridor; isSelected: boolean; onClick: () => void;
 }) {
   const getColor = (s: number) => s > 70 ? '#ef4444' : s > 40 ? '#f97316' : s > 25 ? '#eab308' : '#22c55e';
   const color = getColor(data.score);
-  const totalWeight = data.signals.reduce((s, sig) => s + sig.weight, 0);
+  const totalWeight = data.signals.reduce((s, sig) => s + sig.weight, 0) || 1;
 
   return (
     <div
@@ -44,7 +45,9 @@ function CorridorCard({ data, isSelected, onClick }: {
                 fontSize: 9, fontWeight: 800, letterSpacing: '0.1em',
                 textTransform: 'uppercase', color: '#94a3b8',
               }}>{data.short}</span>
-              <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8' }}>· {data.barrels}</span>
+              {data.throughput && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8' }}>· {data.throughput}</span>
+              )}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -65,37 +68,35 @@ function CorridorCard({ data, isSelected, onClick }: {
           <div className="risk-bar-fill" style={{ width: `${data.score}%`, background: color }} />
         </div>
 
-        {/* Trend + Confidence */}
+        {/* Volatility + Freshness */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-            color: data.trend === 'up' ? '#ef4444' : data.trend === 'down' ? '#22c55e' : '#94a3b8',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            {data.trend === 'up' ? '▲' : data.trend === 'down' ? '▼' : '━'} {data.delta} (24h)
+          <span className={`badge badge-${data.volatility === 'Very High' ? 'critical' : data.volatility === 'High' ? 'high' : data.volatility === 'Moderate' ? 'elevated' : 'low'}`}>
+            {data.volatility} volatility
           </span>
           <DataFreshness as_of={data.as_of} compact />
         </div>
 
         {/* Signal weight bars */}
-        <div style={{ marginBottom: 12 }}>
-          <div style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: '#94a3b8', marginBottom: 6,
-          }}>Signal composition</div>
-          <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 1 }}>
-            {data.signals.map((s, i) => {
-              const sColors: Record<string, string> = { GDELT: '#f97316', aisstream: '#3b82f6', OFAC: '#ef4444', EIA: '#22c55e' };
-              return (
-                <div key={i} style={{
-                  width: `${(s.weight / totalWeight) * 100}%`,
-                  background: sColors[s.source] || '#64748b',
-                  borderRadius: 1,
-                }} />
-              );
-            })}
+        {data.signals.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: '#94a3b8', marginBottom: 6,
+            }}>Signal composition ({data.signals.length})</div>
+            <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 1 }}>
+              {data.signals.map((s, i) => {
+                const sColors: Record<string, string> = { GDELT: '#f97316', aisstream: '#3b82f6', OFAC: '#ef4444', EIA: '#22c55e' };
+                return (
+                  <div key={i} style={{
+                    width: `${(s.weight / totalWeight) * 100}%`,
+                    background: sColors[s.source] || '#64748b',
+                    borderRadius: 1,
+                  }} />
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -150,17 +151,31 @@ function SignalItem({ signal }: { signal: LiveSignal }) {
 
 /* ─── Main Risk Intelligence View ────────────── */
 export default function RiskIntelligence() {
+  const [corridors, setCorridors] = useState<LiveCorridor[]>([]);
+  const [feed, setFeed] = useState<LiveSignal[]>([]);
+  const [isLive, setIsLive] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [selectedCorridor, setSelectedCorridor] = useState(0);
   const [sourceFilter, setSourceFilter] = useState<string>('ALL');
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const selected = CORRIDOR_RISK_DATA[selectedCorridor];
+  const refresh = async () => {
+    setLoading(true);
+    const { data, is_live } = await loadCorridors();
+    setCorridors(data);
+    setFeed(feedFromCorridors(data));
+    setIsLive(is_live);
+    setSelectedCorridor(0);
+    setLoading(false);
+  };
 
-  const filteredSignals = LIVE_SIGNALS.filter(s =>
-    sourceFilter === 'ALL' || s.source === sourceFilter
-  );
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { refresh(); }, []);
 
-  const sources = ['ALL', 'GDELT', 'AIS', 'OFAC', 'MARKET', 'REUTERS'];
+  const selected = corridors[selectedCorridor];
+
+  const filteredSignals = feed.filter(s => sourceFilter === 'ALL' || s.source === sourceFilter);
+  const sources = ['ALL', ...Array.from(new Set(feed.map(s => s.source)))];
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1600, margin: '0 auto' }}>
@@ -183,15 +198,18 @@ export default function RiskIntelligence() {
               Risk Intelligence Center
             </h1>
             <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7, maxWidth: 600, fontWeight: 500 }}>
-              Real-time corridor risk scoring from GDELT geopolitical events, AIS vessel tracking anomalies,
-              OFAC sanctions data, and EIA price signals — with visible reasoning trails.
+              Corridor risk scored by the backend from geopolitical events (GDELT), with the reasoning
+              trail and contributing signals the model actually used.
             </p>
           </div>
 
-          {/* Alert count */}
-          <div style={{ display: 'flex', gap: 8 }}>
+          {/* Live/offline + alert counts + refresh */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span className={`badge ${isLive ? 'badge-low' : 'badge-elevated'}`} style={{ padding: '6px 10px' }}>
+              {isLive ? <><Wifi style={{ width: 12, height: 12 }} /> Live backend</> : <><WifiOff style={{ width: 12, height: 12 }} /> Offline (sample)</>}
+            </span>
             {['critical', 'high', 'elevated'].map(level => {
-              const count = LIVE_SIGNALS.filter(s => s.color === level).length;
+              const count = feed.filter(s => s.color === level).length;
               if (count === 0) return null;
               return (
                 <div key={level} className={`badge badge-${level}`} style={{ padding: '6px 10px' }}>
@@ -199,6 +217,9 @@ export default function RiskIntelligence() {
                 </div>
               );
             })}
+            <button onClick={refresh} disabled={loading} className="btn-secondary" style={{ padding: '6px 12px' }}>
+              <RefreshCw className={loading ? 'animate-spin' : ''} style={{ width: 13, height: 13 }} /> Refresh
+            </button>
           </div>
         </div>
       </div>
@@ -211,11 +232,11 @@ export default function RiskIntelligence() {
             fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
             textTransform: 'uppercase', color: '#94a3b8', marginBottom: 12,
           }}>
-            Corridor Risk Scores ({CORRIDOR_RISK_DATA.length} monitored)
+            Corridor Risk Scores ({corridors.length} monitored)
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {CORRIDOR_RISK_DATA.map((data, i) => (
+            {corridors.map((data, i) => (
               <CorridorCard
                 key={data.corridor_id}
                 data={data}
@@ -223,19 +244,24 @@ export default function RiskIntelligence() {
                 onClick={() => setSelectedCorridor(i)}
               />
             ))}
+            {loading && corridors.length === 0 && (
+              [1, 2, 3, 4].map(i => <div key={i} style={{ height: 150, background: '#f1f5f9', borderRadius: 12, opacity: 0.6 }} />)
+            )}
           </div>
 
           {/* Reasoning Trail for Selected Corridor */}
-          <div style={{ marginTop: 16 }}>
-            <ReasoningTrail
-              signals={selected.signals}
-              reasoning={selected.reasoning_trail}
-              model="gemini-2.5-flash"
-              confidence={selected.confidence}
-              as_of={selected.as_of}
-              defaultOpen={true}
-            />
-          </div>
+          {selected && (
+            <div style={{ marginTop: 16 }}>
+              <ReasoningTrail
+                signals={selected.signals}
+                reasoning={selected.reasoning_trail}
+                model={selected.model}
+                confidence={selected.confidence}
+                as_of={selected.as_of}
+                defaultOpen={true}
+              />
+            </div>
+          )}
         </div>
 
         {/* ─── Right: Live Signal Feed ─── */}
@@ -248,7 +274,7 @@ export default function RiskIntelligence() {
               fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
               textTransform: 'uppercase', color: '#94a3b8',
             }}>
-              Live Signal Feed ({filteredSignals.length})
+              Intelligence Feed ({filteredSignals.length})
             </div>
 
             {/* Filter */}
@@ -298,10 +324,10 @@ export default function RiskIntelligence() {
                 <span style={{
                   fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
                   textTransform: 'uppercase', color: '#0f172a',
-                }}>Intelligence Feed</span>
+                }}>Scoring Events</span>
               </div>
-              <span className="badge badge-critical" style={{ animation: 'pulseDot 2s ease-in-out infinite' }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} /> Live
+              <span className={`badge ${isLive ? 'badge-low' : 'badge-elevated'}`}>
+                {isLive ? 'From backend' : 'Sample feed'}
               </span>
             </div>
 
@@ -311,25 +337,25 @@ export default function RiskIntelligence() {
               ))}
               {filteredSignals.length === 0 && (
                 <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                  No signals match the selected filter.
+                  {loading ? 'Loading events…' : 'No signals match the selected filter.'}
                 </div>
               )}
             </div>
 
-            {/* Dark shipping insight callout */}
+            {/* Methodology callout */}
             <div style={{
               padding: '14px 20px', borderTop: '1px solid rgba(0,0,0,0.06)',
-              background: 'rgba(239,68,68,0.04)',
+              background: 'rgba(59,130,246,0.04)',
               display: 'flex', gap: 10, alignItems: 'flex-start',
             }}>
-              <Ship style={{ width: 16, height: 16, color: '#ef4444', flexShrink: 0, marginTop: 2 }} />
+              <AlertCircle style={{ width: 16, height: 16, color: '#3b82f6', flexShrink: 0, marginTop: 2 }} />
               <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6, fontWeight: 500 }}>
-                <strong style={{ color: '#ef4444', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Dark Shipping Insight:
+                <strong style={{ color: '#2563eb', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  How this is scored:
                 </strong>{' '}
-                Tankers switching off AIS transponders near chokepoints is treated as a{' '}
-                <strong style={{ color: '#0f172a' }}>positive risk signal</strong>, not missing data —
-                consistent with sanctioned-vessel evasion patterns observed in 2024-2026.
+                Each corridor starts from a baseline, then recency-weighted event pressure and conflict-tone
+                adjustment are added. The events above are exactly what fed the displayed score — open a corridor&apos;s
+                reasoning trail to see the full breakdown.
               </div>
             </div>
           </div>

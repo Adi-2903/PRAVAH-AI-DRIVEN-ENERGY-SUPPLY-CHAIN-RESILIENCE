@@ -1,0 +1,13 @@
+# Pravah monolith backend (api.py) — runtime deps only.
+# Pinned to versions verified end-to-end; all have Linux wheels (no compiler
+# needed). Loosen to >= if a host lacks a wheel.
+# NOTE: scipy was removed — the SPR optimiser now uses an exact greedy for its
+# single-budget LP (proven identical objective to scipy.linprog), which also
+# keeps the serverless bundle well under Vercel's 250MB function limit.
+fastapi==0.139.0
+uvicorn[standard]==0.51.0
+pydantic==2.13.4
+numpy==2.5.1
+networkx==3.6.1
+httpx==0.28.1
+google-generativeai

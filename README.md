@@ -1,7 +1,7 @@
-================================================================================
+============================================================
 PRAVAH: AI-DRIVEN ENERGY SUPPLY CHAIN RESILIENCE
 BUILD PLAN
-================================================================================
+============================================================
 Theme: Supply Chain Intelligence / Energy Security / Geopolitical Risk
 
 Think of this as an operating system for India's energy supply chain — not
@@ -56,11 +56,13 @@ F. RELIABILITY RULE
 
 pravah/
 ├── README.md
-├── docker-compose.yml                 (spins up all services together)
+├── api.py                             PRODUCTION DEPLOYABLE — single-file
+│                                        monolith (all agents merged; native
+│                                        Vercel deployment, no containers)
 │
 ├── shared/                            (owned by whoever does Stage 1-3,
 │                                        frozen once Stage 4 begins)
-│   ├── schemas/                       JSON/pydantic contracts — the
+│   ├── contracts/                     JSON/pydantic contracts — the
 │   │                                  "API menu" every agent must follow
 │   ├── db/                            Supabase schema + migrations
 │   └── clients/                       ready-made wrappers for EIA, GDELT,
@@ -71,7 +73,6 @@ pravah/
 │   ├── scoring/
 │   ├── tests/
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── main.py                        FastAPI service -> exposes
 │                                       POST /risk-score
 │
@@ -80,7 +81,6 @@ pravah/
 │   ├── simulations/
 │   ├── tests/
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── main.py                        exposes POST /simulate
 │
 ├── procurement-agent/                 MEMBER 3
@@ -88,14 +88,12 @@ pravah/
 │   ├── knowledge_graph/               (NetworkX graph lives here)
 │   ├── tests/
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── main.py                        exposes POST /recommend
 │
 ├── spr-agent/                         MEMBER 3 or 4 (pick based on load)
 │   ├── optimization/                  SciPy linear programming
 │   ├── tests/
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── main.py                        exposes POST /spr-schedule
 │
 ├── coordinator/                       built LAST, Stage 9 — nobody
@@ -104,10 +102,6 @@ pravah/
 │   ├── resolver/
 │   └── main.py                        calls all four agents above,
 │                                       exposes POST /final-recommendation
-│
-├── ppac-scraper/                      independent cron job, no
-│   ├── scraper.py                     dependency on any agent
-│   └── fallback_snapshot.csv
 │
 └── frontend/                          MEMBER 4
     ├── app/(citizen)/
@@ -118,11 +112,13 @@ pravah/
                                         microservice above by its
                                         contract, not its internals
 
-Why this shape works:
-   - Every agent is its own FastAPI microservice with its own
-     requirements.txt and Dockerfile — one person's broken dependency
-     never blocks anyone else.
-   - The "shared/schemas" folder is the one place that needs agreement
+Why this shape worked during the build (each agent developed in isolation),
+and how it ships now:
+   - During development every agent was its own FastAPI service with its own
+     requirements.txt — one person's broken dependency never blocked anyone else.
+   - For PRODUCTION those agents are merged into the single-file `api.py`
+     monolith and deployed natively on Vercel. No containers are used.
+   - The "shared/contracts" folder is the one place that needs agreement
      up front (Stage 4). Once it's frozen, every folder can be built,
      tested, and demoed completely in isolation, using mock data that
      matches the schema, before the real upstream agent even exists.
@@ -211,7 +207,7 @@ STAGE 2 — Database & Backend Foundation (Day 1-2, one person)
 STAGE 3 — Knowledge Graph + Schema Freeze (Day 2)
    Build Supplier -> Route -> Port -> Refinery -> Fuel Type in NetworkX.
    Simultaneously, the team agrees and freezes the JSON contracts in
-   shared/schemas/ for risk-score, simulate, recommend, and
+   shared/contracts/ for risk-score, simulate, recommend, and
    spr-schedule. Once frozen, nobody changes a contract without telling
    everyone — this is what makes Stage 4 parallel work possible.
 
@@ -290,7 +286,7 @@ Member 4 — frontend/ (+ shared/ setup, deployment)
    FastAPI/Supabase foundation, auth, 3-tier product shell, onboarding,
    export, caching/fallback layer, deployment.
 
-(spr-agent/ and ppac-scraper/ get assigned to whoever has bandwidth
+(spr-agent/ gets assigned to whoever has bandwidth
 after their primary folder stabilizes — both are small and self
 contained.)
 
@@ -316,8 +312,7 @@ AIS Ship Data    | aisstream.io + AISHub
 Sanctions        | OFAC SDN list
 India Gov Data   | PPAC/MoP scraper + CSV cache
 Optimization     | SciPy
-Containerization | Docker + docker-compose (one container per folder)
-Deployment       | Vercel (frontend) + Railway (services) + Supabase
+Deployment       | Vercel (Next.js + Python Serverless Function). No containers.
 
 ================================================================================
 8. WHAT MAKES THIS STAND OUT

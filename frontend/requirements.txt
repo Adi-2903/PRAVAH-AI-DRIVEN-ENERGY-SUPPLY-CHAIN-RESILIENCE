@@ -1,0 +1,8 @@
+# Python deps for the Vercel Python Function (frontend/api/index.py).
+# No uvicorn (Vercel provides the ASGI server) and no scipy (SPR uses an exact
+# greedy) — keeps the serverless bundle ~70MB, well under Vercel's 250MB limit.
+fastapi==0.139.0
+pydantic==2.13.4
+numpy==2.5.1
+networkx==3.6.1
+httpx==0.28.1

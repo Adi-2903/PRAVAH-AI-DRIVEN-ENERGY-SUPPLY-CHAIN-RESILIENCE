@@ -15,7 +15,7 @@ shared/
 │   ├── seed.py              # Stage 2a — seed countries, corridors, data_sources
 │   ├── knowledge_graph.py   # Stage 3 — supply-chain graph (networkx)
 │   └── migrations/          # future migrations
-├── schemas/                 # Stage 3 — FROZEN Pydantic contracts (see "Schema Freeze")
+├── contracts/               # Stage 3 — FROZEN Pydantic contracts (see "Schema Freeze")
 │   ├── risk_score.py
 │   ├── simulate.py
 │   ├── recommend.py
@@ -57,13 +57,13 @@ SUPABASE_SERVICE_KEY=your_service_key_here
 The exact same strings are used in three places and must never diverge:
 - `corridors.name` in `db/schema.sql` / `db/seed.py`
 - corridor node IDs in `db/knowledge_graph.py`
-- the `Corridor` `Literal[...]` enum in `schemas/risk_score.py` and `schemas/simulate.py`
+- the `Corridor` `Literal[...]` enum in `contracts/risk_score.py` and `contracts/simulate.py`
 
 A case mismatch between the DB and the graph is a silent join failure.
 
 ## ⚠️ Schema Freeze
 
-`shared/schemas/` is the contract every agent depends on:
+`shared/contracts/` is the contract every agent depends on:
 
 | Schema | Produced by | Consumed by |
 |--------|-------------|-------------|
@@ -91,6 +91,6 @@ Live Supabase project **`pravah`** (`runewqeuvmcqqvfnqhzj`, region ap-south-1) i
   immediately — re-enable email confirmation before production.
 - ✅ All `shared/**/*.py` byte-compile; `python shared/db/knowledge_graph.py` →
   `18 nodes, 29 edges`, `24` paths through Hormuz.
-- ⏳ Importing `shared/schemas/*` and running `uvicorn shared.main:app` locally still
+- ⏳ Importing `shared/contracts/*` and running `uvicorn shared.main:app` locally still
   need `pip install -r shared/requirements.txt`. On this machine the system Python's
   `ctypes`/`pip` are broken, so install deps in a fresh Python before running those two.

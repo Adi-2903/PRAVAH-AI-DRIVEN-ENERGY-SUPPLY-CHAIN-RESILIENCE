@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════
 //  PRAVAH — Central API client
-//  One place that knows every microservice's base URL. URLs come from
-//  NEXT_PUBLIC_* env vars (see .env.example); defaults match docker-compose.
+//  One place that knows every service's base URL. URLs come from NEXT_PUBLIC_*
+//  env vars (see .env.example). In production every var points at the single
+//  monolith backend (api.py); locally they default to per-agent dev ports.
 //  Every module fetches through here instead of hardcoding host:port, so
 //  ports/deploy targets change in ONE place and every call has a fallback.
 // ═══════════════════════════════════════════════
@@ -10,15 +11,21 @@ import { fetchWithFallback } from './mock-data';
 
 export type Service = 'risk' | 'scenario' | 'procurement' | 'spr' | 'coordinator' | 'shared';
 
-// Defaults align with docker-compose.yml host port mappings.
-// A standalone `uvicorn` agent defaults to :8000 — override per-service via env.
+// Default base is the same-origin "/api" — on Vercel the backend runs as a
+// Python Function at /api/*, so with NO env config the browser calls
+// /api/simulate, /api/corridors, ... (same origin ⇒ no CORS). Override any
+// service via NEXT_PUBLIC_*_URL for split hosting or local dev (e.g. set them
+// to http://127.0.0.1:8000 in frontend/.env.local to hit a local uvicorn).
 const SERVICE_BASE: Record<Service, string> = {
-  risk:        process.env.NEXT_PUBLIC_RISK_URL        ?? 'http://127.0.0.1:8001',
-  scenario:    process.env.NEXT_PUBLIC_SCENARIO_URL    ?? 'http://127.0.0.1:8002',
-  procurement: process.env.NEXT_PUBLIC_PROCUREMENT_URL ?? 'http://127.0.0.1:8003',
-  spr:         process.env.NEXT_PUBLIC_SPR_URL         ?? 'http://127.0.0.1:8004',
-  coordinator: process.env.NEXT_PUBLIC_COORDINATOR_URL ?? 'http://127.0.0.1:8005',
-  shared:      process.env.NEXT_PUBLIC_SHARED_URL      ?? 'http://127.0.0.1:8000',
+  // Same-origin "/api" default → Vercel (Python Function) works with zero config.
+  // For local microservices, override per-service in .env.local (see .env.example:
+  // risk 8001 · scenario 8002 · procurement 8003 · spr 8004 · coordinator 8005 · shared 8000).
+  risk:        process.env.NEXT_PUBLIC_RISK_URL        ?? '/api',
+  scenario:    process.env.NEXT_PUBLIC_SCENARIO_URL    ?? '/api',
+  procurement: process.env.NEXT_PUBLIC_PROCUREMENT_URL ?? '/api',
+  spr:         process.env.NEXT_PUBLIC_SPR_URL         ?? '/api',
+  coordinator: process.env.NEXT_PUBLIC_COORDINATOR_URL ?? '/api',
+  shared:      process.env.NEXT_PUBLIC_SHARED_URL      ?? '/api',
 };
 
 /** Build a fully-qualified URL for a service endpoint. */

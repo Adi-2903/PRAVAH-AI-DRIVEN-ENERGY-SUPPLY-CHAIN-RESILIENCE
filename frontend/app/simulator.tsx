@@ -8,6 +8,7 @@ import {
 import { AlertCircle, Info, RefreshCw, Database, CheckCircle, Clock, FileDown } from 'lucide-react';
 import { exportScenarioReport, exportToCSV } from './lib/export';
 import { serviceUrl, postJSON } from './lib/api';
+import { useLiveData } from './lib/use-live-data';
 
 interface SimResult {
   brent_price_distribution: { p10: number; p50: number; p90: number; mean: number; std_dev: number };
@@ -112,6 +113,14 @@ export default function ScenarioSimulator() {
   const [runCount, setRunCount] = useState(0);
   const [dataStatus, setDataStatus] = useState<DataStatus | null>(null);
 
+  const { market, corridors, refresh: liveRefresh, loading: liveLoading, error: liveError, lastUpdated } = useLiveData();
+  
+  useEffect(() => {
+    if (market?.brent_usd && brent === 82.0) {
+      setBrent(market.brent_usd);
+    }
+  }, [market?.brent_usd, brent]);
+
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(serviceUrl('scenario', '/data-status'), { signal: AbortSignal.timeout(8000) });
@@ -122,7 +131,6 @@ export default function ScenarioSimulator() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStatus();
   }, [fetchStatus]);
 
@@ -227,6 +235,9 @@ export default function ScenarioSimulator() {
           <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
             Monte Carlo simulation engine · Calibrated vs. EIA realized Brent volatility
           </p>
+          {lastUpdated && (
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>Last Updated: {new Date(lastUpdated).toLocaleTimeString('en-IN', { hour12: false })} IST</div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -263,9 +274,9 @@ export default function ScenarioSimulator() {
           <div>
             <div className="label-caps" style={{ marginBottom: 6, color: 'transparent' }}>.</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={run} disabled={loading} className="btn-primary" style={{ padding: '7px 16px' }}>
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                Re-run
+              <button onClick={() => { run(); liveRefresh(); }} disabled={loading || liveLoading} className="btn-primary" style={{ padding: '7px 16px' }}>
+                <RefreshCw className={`w-3.5 h-3.5 ${(loading || liveLoading) ? 'animate-spin' : ''}`} />
+                Re-run & Refresh
               </button>
               {result && (
                 <>
@@ -286,7 +297,6 @@ export default function ScenarioSimulator() {
         </div>
       </div>
 
-      {/* Preset scenarios */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, overflowX: 'auto', paddingBottom: 16, marginBottom: 8 }}>
         <span className="label-caps">Scenario Presets:</span>
         {SCENARIOS.map(s => (
@@ -295,6 +305,12 @@ export default function ScenarioSimulator() {
           </button>
         ))}
       </div>
+
+      {liveError && (
+        <div style={{ marginBottom: 24, padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, color: '#f87171', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10 }}>
+          ⚠ Live backend unavailable - Using cached data. ({liveError})
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: 24 }}>
         
