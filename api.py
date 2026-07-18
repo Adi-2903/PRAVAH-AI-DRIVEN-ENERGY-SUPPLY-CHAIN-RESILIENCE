@@ -69,6 +69,7 @@ class SimulateRequest(BaseModel):
     num_simulations: int = Field(ge=1000, le=20000)
     current_brent_usd: float
     elasticity_assumptions: ElasticityAssumptions
+    scenario_type: Literal["base", "hormuz_closure", "opec_cut"] = "base"
 
 
 class PriceDistribution(BaseModel):
@@ -144,6 +145,7 @@ class SPRScheduleResponse(BaseModel):
     savings_pct: float
     reserve_never_below_floor: bool
     computed_at: str
+    replenishment_window_days: int = 0
 
 
 # ── procurement (was procurement-agent/models.py) ──────────────────────────
@@ -855,9 +857,18 @@ def _simulate(req: SimulateRequest) -> SimulateResponse:
     risk_factor = req.risk_score / 100.0
 
     # Geometric random walk with mean reversion (Ornstein-Uhlenbeck log process).
-    theta = S0 * (1 + 0.5 * risk_factor)
-    kappa = 0.1
-    sigma = CALIBRATED_VOLATILITY + (0.05 * risk_factor)
+    if req.scenario_type == "hormuz_closure":
+        theta = S0 * (1 + 1.2 * risk_factor)
+        sigma = CALIBRATED_VOLATILITY + (0.15 * risk_factor)
+        kappa = 0.05
+    elif req.scenario_type == "opec_cut":
+        theta = S0 * (1 + 0.3 * risk_factor)
+        sigma = CALIBRATED_VOLATILITY + (0.02 * risk_factor)
+        kappa = 0.2
+    else:
+        theta = S0 * (1 + 0.5 * risk_factor)
+        kappa = 0.1
+        sigma = CALIBRATED_VOLATILITY + (0.05 * risk_factor)
 
     paths = np.zeros((N, days))
     paths[:, 0] = S0
@@ -955,8 +966,14 @@ def _spr_schedule(req: SPRScheduleRequest) -> SPRScheduleResponse:
     # EXACT optimum (identical objective to scipy's linprog, no scipy needed,
     # which keeps the serverless bundle small enough for Vercel's 250MB limit).
     max_total_draw = req.current_reserve_days - req.min_safety_floor_days
+    
+    current_month = datetime.now().month
+    DEMAND_SEASONALITY = [1.0, 1.0, 1.05, 1.0, 0.95, 0.9, 0.9, 0.95, 1.05, 1.1, 1.1, 1.0]
+    seasonality_multiplier = DEMAND_SEASONALITY[current_month - 1]
+    adjusted_prices = [p * seasonality_multiplier for p in req.daily_price_forecast_usd_per_bbl]
+
     value = [
-        req.daily_price_forecast_usd_per_bbl[i] * _spr_risk_weight(req.daily_risk_scores[i])
+        adjusted_prices[i] * _spr_risk_weight(req.daily_risk_scores[i])
         for i in range(N)
     ]
     opt = [0.0] * N
@@ -972,11 +989,11 @@ def _spr_schedule(req: SPRScheduleRequest) -> SPRScheduleResponse:
     flat_daily = min(max_total_draw / N, req.max_daily_drawdown_days)
     naive_drawdowns = np.full(N, flat_daily)
 
-    opt_value_usd = np.sum(opt_drawdowns * req.daily_price_forecast_usd_per_bbl) * 1_000_000
-    naive_value_usd = np.sum(naive_drawdowns * req.daily_price_forecast_usd_per_bbl) * 1_000_000
+    opt_value_usd = np.sum(opt_drawdowns * adjusted_prices) * 1_000_000
+    naive_value_usd = np.sum(naive_drawdowns * adjusted_prices) * 1_000_000
 
     total_demand = req.max_daily_drawdown_days * N
-    avg_price = np.mean(req.daily_price_forecast_usd_per_bbl)
+    avg_price = np.mean(adjusted_prices)
     unmitigated_cost = total_demand * avg_price * 1_000_000
 
     baseline_cost = unmitigated_cost - naive_value_usd
@@ -997,8 +1014,16 @@ def _spr_schedule(req: SPRScheduleRequest) -> SPRScheduleResponse:
             rat = "Reserve preserved for higher risk days."
         schedule.append(DailySchedule(
             day=i + 1, drawdown_days=round(d, 3), reserve_after_days=round(current_res, 3),
-            risk_score=req.daily_risk_scores[i], price_usd=req.daily_price_forecast_usd_per_bbl[i], rationale=rat,
+            risk_score=req.daily_risk_scores[i], price_usd=adjusted_prices[i], rationale=rat,
         ))
+
+    G_temp = build_procurement_graph()
+    low_risk_transit_days = []
+    for u, v, data in G_temp.edges(data=True):
+        if "transit_days" in data:
+            if G_temp.nodes[v].get("risk", 100) <= 30:
+                low_risk_transit_days.append(data["transit_days"])
+    replenishment_window_days = int(min(low_risk_transit_days)) + 10 if low_risk_transit_days else 30
 
     return SPRScheduleResponse(
         schedule=schedule,
@@ -1009,6 +1034,7 @@ def _spr_schedule(req: SPRScheduleRequest) -> SPRScheduleResponse:
         savings_pct=round(savings_pct, 2),
         reserve_never_below_floor=(current_res >= req.min_safety_floor_days - 1e-5),
         computed_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        replenishment_window_days=replenishment_window_days,
     )
 
 
@@ -1035,51 +1061,51 @@ def _spr_schedule_mock() -> SPRScheduleResponse:
 def build_procurement_graph() -> nx.DiGraph:
     G = nx.DiGraph()
     suppliers = {
-        "SAU_ARAMCO":  {"type": "supplier", "cost": 82.4, "grade": "medium_sour", "country": "Saudi Arabia"},
-        "IRQ_SOMO":    {"type": "supplier", "cost": 79.8, "grade": "medium_sour", "country": "Iraq"},
-        "UAE_ADNOC":   {"type": "supplier", "cost": 83.5, "grade": "light_sweet", "country": "UAE"},
-        "RUS_ROSNEFT": {"type": "supplier", "cost": 68.0, "grade": "medium_sour", "country": "Russia"},
-        "USA_WTI":     {"type": "supplier", "cost": 88.5, "grade": "light_sweet", "country": "USA"},
-        "NGA_NNPC":    {"type": "supplier", "cost": 86.0, "grade": "light_sweet", "country": "Nigeria"},
-        "KWT_KPC":     {"type": "supplier", "cost": 80.2, "grade": "medium_sour", "country": "Kuwait"},
-        "MEX_PEMEX":   {"type": "supplier", "cost": 77.5, "grade": "heavy_sour", "country": "Mexico"},
+        "SAU_ARAMCO":  {"type": "supplier", "cost": 82.4, "grade": "medium_sour", "country": "Saudi Arabia", "lat": 24.0, "lon": 49.0},
+        "IRQ_SOMO":    {"type": "supplier", "cost": 79.8, "grade": "medium_sour", "country": "Iraq", "lat": 31.0, "lon": 47.8},
+        "UAE_ADNOC":   {"type": "supplier", "cost": 83.5, "grade": "light_sweet", "country": "UAE", "lat": 23.4, "lon": 54.4},
+        "RUS_ROSNEFT": {"type": "supplier", "cost": 68.0, "grade": "medium_sour", "country": "Russia", "lat": 55.0, "lon": 60.0},
+        "USA_WTI":     {"type": "supplier", "cost": 88.5, "grade": "light_sweet", "country": "USA", "lat": 38.0, "lon": -100.0},
+        "NGA_NNPC":    {"type": "supplier", "cost": 86.0, "grade": "light_sweet", "country": "Nigeria", "lat": 9.0, "lon": 8.0},
+        "KWT_KPC":     {"type": "supplier", "cost": 80.2, "grade": "medium_sour", "country": "Kuwait", "lat": 29.4, "lon": 47.5},
+        "MEX_PEMEX":   {"type": "supplier", "cost": 77.5, "grade": "heavy_sour", "country": "Mexico", "lat": 19.4, "lon": -99.0},
     }
     for name, data in suppliers.items():
         G.add_node(name, **data)
 
     routes = {
-        "hormuz_saudi":  {"type": "route", "risk": 78, "corridor": "Hormuz Strait", "display": "Hormuz (Saudi leg)"},
-        "hormuz_iraq":   {"type": "route", "risk": 74, "corridor": "Hormuz Strait", "display": "Hormuz (Iraq leg)"},
-        "hormuz_uae":    {"type": "route", "risk": 76, "corridor": "Hormuz Strait", "display": "Hormuz (UAE leg)"},
-        "hormuz_kuwait": {"type": "route", "risk": 77, "corridor": "Hormuz Strait", "display": "Hormuz (Kuwait leg)"},
-        "basra_direct":  {"type": "route", "risk": 38, "corridor": "Basra-India", "display": "Basra Direct VLCC"},
-        "red_sea_suez":  {"type": "route", "risk": 85, "corridor": "Red Sea/Suez", "display": "Red Sea / Suez"},
-        "cape_russia":   {"type": "route", "risk": 18, "corridor": "Cape Route", "display": "Cape of Good Hope (Russia)"},
-        "cape_nigeria":  {"type": "route", "risk": 16, "corridor": "Cape Route", "display": "Cape of Good Hope (Nigeria)"},
-        "cape_mexico":   {"type": "route", "risk": 14, "corridor": "Trans-Atlantic", "display": "Trans-Atlantic / Cape"},
-        "pacific_india": {"type": "route", "risk": 12, "corridor": "Pacific-India", "display": "Pacific-India"},
+        "hormuz_saudi":  {"type": "route", "risk": 78, "corridor": "Hormuz Strait", "display": "Hormuz (Saudi leg)", "lat": 26.5, "lon": 56.5},
+        "hormuz_iraq":   {"type": "route", "risk": 74, "corridor": "Hormuz Strait", "display": "Hormuz (Iraq leg)", "lat": 25.8, "lon": 57.0},
+        "hormuz_uae":    {"type": "route", "risk": 76, "corridor": "Hormuz Strait", "display": "Hormuz (UAE leg)", "lat": 25.2, "lon": 57.5},
+        "hormuz_kuwait": {"type": "route", "risk": 77, "corridor": "Hormuz Strait", "display": "Hormuz (Kuwait leg)", "lat": 26.2, "lon": 56.8},
+        "basra_direct":  {"type": "route", "risk": 38, "corridor": "Basra-India", "display": "Basra Direct VLCC", "lat": 22.0, "lon": 55.0},
+        "red_sea_suez":  {"type": "route", "risk": 85, "corridor": "Red Sea/Suez", "display": "Red Sea / Suez", "lat": 20.0, "lon": 38.0},
+        "cape_russia":   {"type": "route", "risk": 18, "corridor": "Cape Route", "display": "Cape of Good Hope (Russia)", "lat": -34.0, "lon": 18.5},
+        "cape_nigeria":  {"type": "route", "risk": 16, "corridor": "Cape Route", "display": "Cape of Good Hope (Nigeria)", "lat": -33.0, "lon": 16.0},
+        "cape_mexico":   {"type": "route", "risk": 14, "corridor": "Trans-Atlantic", "display": "Trans-Atlantic / Cape", "lat": -32.0, "lon": 14.0},
+        "pacific_india": {"type": "route", "risk": 12, "corridor": "Pacific-India", "display": "Pacific-India", "lat": 10.0, "lon": 90.0},
     }
     for name, data in routes.items():
         G.add_node(name, **data)
 
     ports = {
-        "PORT_VADINAR": {"type": "port", "display": "Vadinar Port"},
-        "PORT_KANDLA": {"type": "port", "display": "Kandla Port"},
-        "PORT_MUMBAI": {"type": "port", "display": "Mumbai JNPT"},
-        "PORT_PARADIP": {"type": "port", "display": "Paradip Port"},
-        "PORT_MANGALORE": {"type": "port", "display": "Mangalore Port"},
-        "PORT_VIZAG": {"type": "port", "display": "Visakhapatnam"},
+        "PORT_VADINAR": {"type": "port", "display": "Vadinar Port", "lat": 22.5, "lon": 69.8, "congestion": 0.3},
+        "PORT_KANDLA": {"type": "port", "display": "Kandla Port", "lat": 23.0, "lon": 70.2, "congestion": 0.8},
+        "PORT_MUMBAI": {"type": "port", "display": "Mumbai JNPT", "lat": 18.9, "lon": 72.8, "congestion": 0.9},
+        "PORT_PARADIP": {"type": "port", "display": "Paradip Port", "lat": 20.3, "lon": 86.6, "congestion": 0.4},
+        "PORT_MANGALORE": {"type": "port", "display": "Mangalore Port", "lat": 12.9, "lon": 74.8, "congestion": 0.2},
+        "PORT_VIZAG": {"type": "port", "display": "Visakhapatnam", "lat": 17.7, "lon": 83.3, "congestion": 0.6},
     }
     for name, data in ports.items():
         G.add_node(name, **data)
 
     refineries = {
-        "REF_JAMNAGAR": {"type": "refinery", "display": "Jamnagar (RIL)"},
-        "REF_VADINAR": {"type": "refinery", "display": "Vadinar (Nayara)"},
-        "REF_MUMBAI": {"type": "refinery", "display": "Mumbai (BPCL/HPCL)"},
-        "REF_PARADIP": {"type": "refinery", "display": "Paradip (IOCL)"},
-        "REF_MANGALORE": {"type": "refinery", "display": "Mangalore (MRPL)"},
-        "REF_VIZAG": {"type": "refinery", "display": "Visakhapatnam (HPCL)"},
+        "REF_JAMNAGAR": {"type": "refinery", "display": "Jamnagar (RIL)", "lat": 22.4, "lon": 70.1},
+        "REF_VADINAR": {"type": "refinery", "display": "Vadinar (Nayara)", "lat": 22.3, "lon": 69.9},
+        "REF_MUMBAI": {"type": "refinery", "display": "Mumbai (BPCL/HPCL)", "lat": 19.0, "lon": 72.9},
+        "REF_PARADIP": {"type": "refinery", "display": "Paradip (IOCL)", "lat": 20.2, "lon": 86.7},
+        "REF_MANGALORE": {"type": "refinery", "display": "Mangalore (MRPL)", "lat": 12.8, "lon": 74.9},
+        "REF_VIZAG": {"type": "refinery", "display": "Visakhapatnam (HPCL)", "lat": 17.6, "lon": 83.4},
     }
     for name, data in refineries.items():
         G.add_node(name, **data)
@@ -1230,12 +1256,17 @@ async def _recommend(req: RecommendRequest) -> RecommendResponse:
             if G.nodes[route].get("type") != "route" or G.nodes[port].get("type") != "port":
                 continue
             base_cost = G.nodes[supplier].get("cost", 80.0)
+            corridor_risk = G.nodes[route].get("risk", 50)
+            port_congestion = G.nodes[port].get("congestion", 0.5)
+            tanker_availability = max(0.1, 1.0 - (corridor_risk / 100.0))
             per_supplier_cands.append({
                 "supplier": supplier, "route": route, "port": port,
                 "grade_match": req.required_crude_grade, "grade_compatibility_score": compatibility,
                 "estimated_cost_usd_per_bbl": get_live_cost(market, supplier, base_cost),
                 "transit_days": G[supplier][route].get("transit_days", 15),
-                "corridor_risk_score": G.nodes[route].get("risk", 50),
+                "corridor_risk_score": corridor_risk,
+                "port_congestion": port_congestion,
+                "tanker_availability": tanker_availability,
                 "route_display": G.nodes[route].get("display", route),
                 "port_display": G.nodes[port].get("display", port),
                 "supplier_country": G.nodes[supplier].get("country", supplier),
@@ -1253,11 +1284,15 @@ async def _recommend(req: RecommendRequest) -> RecommendResponse:
 
     if baseline_cand is None:
         base_cost = G.nodes.get(req.current_supplier, {}).get("cost", 82.4)
+        port_congestion = G.nodes.get("PORT_VADINAR", {}).get("congestion", 0.5)
+        tanker_availability = max(0.1, 1.0 - (req.current_corridor_risk_score / 100.0))
         baseline_cand = {
             "supplier": req.current_supplier, "route": "hormuz_strait", "port": "PORT_VADINAR",
             "grade_match": req.required_crude_grade, "grade_compatibility_score": compatibility,
             "estimated_cost_usd_per_bbl": get_live_cost(market, req.current_supplier, base_cost),
             "transit_days": 9, "corridor_risk_score": req.current_corridor_risk_score,
+            "port_congestion": port_congestion,
+            "tanker_availability": tanker_availability,
             "route_display": "Hormuz Strait", "port_display": "Vadinar Port", "supplier_country": "Saudi Arabia",
         }
 
@@ -1277,7 +1312,8 @@ async def _recommend(req: RecommendRequest) -> RecommendResponse:
         nc = norm(c["estimated_cost_usd_per_bbl"], min_cost, max_cost)
         nr = norm(c["corridor_risk_score"], min_risk, max_risk)
         nt = norm(c["transit_days"], min_transit, max_transit)
-        return round(req.cost_weight * nc + req.risk_weight * nr + req.transit_time_weight * nt, 4)
+        base_score = req.cost_weight * nc + req.risk_weight * nr + req.transit_time_weight * nt
+        return round(base_score * c["tanker_availability"] * (1.0 - c["port_congestion"] * 0.5), 4)
 
     b_score = composite(baseline_cand)
     baseline_out = Baseline(
@@ -1311,7 +1347,8 @@ async def _recommend(req: RecommendRequest) -> RecommendResponse:
             parts.append(f"transit {cand['transit_days']}d ({'same' if transit_delta == 0 else f'{abs(transit_delta)}d faster'})")
         else:
             parts.append(f"transit {cand['transit_days']}d ({transit_delta}d slower)")
-        parts.append(f"src: {cand['supplier_country']}, via {cand['port_display']}")
+        parts.append(f"src: {cand['supplier_country']}, via {cand['port_display']} ({cand['port_congestion']*100:.0f}% congested)")
+        parts.append(f"tanker availability at {cand['tanker_availability']*100:.0f}%")
         cand["composite_score"] = score
         cand["reasoning"] = ". ".join(parts) + "."
         scored.append(cand)
@@ -1378,6 +1415,7 @@ class RiskScoreResponse(BaseModel):
     computed_at: datetime
     data_sources: List[str]
     model: str
+    supplier_risk_scores: dict[str, float] = Field(default_factory=dict)
 
 
 # ── ingestion: bundled deterministic fixtures (always available) ────────────
@@ -1458,6 +1496,7 @@ def _gdelt_events(corridor: str, as_of: datetime) -> List[dict]:
 
 
 # ── classify (heuristic; Gemini optional via GEMINI_API_KEY) ────────────────
+_SANCTIONED_ENTITIES = ["rosneft", "pdvsa", "nioc", "nnpc"]
 _RISK_RELEVANT = re.compile(
     r"\b(oil|crude\w*|tanker\w*|refiner\w*|strait\w*|shipping|ship|sanction\w*|"
     r"ports?|vessel\w*|opec|pipeline\w*|embargo\w*|naval|maritime|export\w*|"
@@ -1566,6 +1605,9 @@ def _run_risk_pipeline(corridor: str, as_of: datetime, use_live: bool = False):
         e["relevant"] = _risk_is_relevant(e.get("headline", ""))
         e["corridor"] = _risk_assign_corridor(e, corridor)
         e["severity"] = _risk_severity(e)
+        if e["relevant"] and any(ent in e.get("headline", "").lower() for ent in _SANCTIONED_ENTITIES):
+            e["severity"] = "critical"
+            e["sanctions_hit"] = True
 
     events = [e for e in raw if e.get("relevant") and e.get("corridor") == corridor]
 
@@ -1577,7 +1619,10 @@ def _run_risk_pipeline(corridor: str, as_of: datetime, use_live: bool = False):
     for e in events:
         sev = e["severity"]
         counts[sev] = counts.get(sev, 0) + 1
-        pressure += _SEVERITY_POINTS.get(sev, 2.0) * _recency_factor(e["event_date"], as_of)
+        points = _SEVERITY_POINTS.get(sev, 2.0)
+        pressure += points * _recency_factor(e["event_date"], as_of)
+        if e.get("sanctions_hit"):
+            trail.append(f"Sanctions hit in event '{e['headline'][:30]}...' -> escalated severity to critical (+{points} pts).")
     pressure = min(pressure, _MAX_EVENT_PRESSURE)
     if events:
         breakdown = ", ".join(f"{counts[s]} {s}" for s in ("critical", "high", "medium", "low") if counts[s])
@@ -1627,11 +1672,24 @@ def build_risk_response(corridor: str, as_of: Optional[datetime] = None, use_liv
     model = "gemini-2.5-flash" if os.getenv("GEMINI_API_KEY") else "heuristic-keyword-v1"
     import typing
     alert_level_typed = typing.cast(Literal['critical', 'elevated', 'high', 'low'], result["alert_level"])
+    
+    supplier_risk_scores = {}
+    C_MAP = {"hormuz": "Hormuz Strait", "redsea": "Red Sea/Suez", "cape": "Cape Route", "domestic": "Domestic"}
+    target_c = C_MAP.get(corridor)
+    if target_c:
+        for u, d in G.nodes(data=True):
+            if d.get("type") == "supplier":
+                for route_id in G.successors(u):
+                    if G.nodes[route_id].get("corridor") == target_c:
+                        supplier_risk_scores[u] = result["score"]
+                        break
+
     return RiskScoreResponse(
         corridor=corridor, score=result["score"], confidence=result["confidence"],
         alert_level=alert_level_typed, signals=signals,
         reasoning_trail=" ".join(result["reasoning_trail"]), key_events=key_events,
         computed_at=datetime.now(timezone.utc), data_sources=sources or ["fixtures"], model=model,
+        supplier_risk_scores=supplier_risk_scores,
     )
 
 
@@ -1644,6 +1702,7 @@ class FinalRecommendationRequest(BaseModel):
     as_of: Optional[datetime] = None
     current_brent_usd: float = 84.0
     shock_duration_days: int = Field(default=14, ge=2, le=60)
+    scenario_type: Literal["base", "hormuz_closure", "opec_cut"] = "base"
 
 
 class Resolution(BaseModel):
@@ -1680,6 +1739,7 @@ async def _coordinate(req: FinalRecommendationRequest) -> FinalRecommendationRes
         num_simulations=5000, current_brent_usd=req.current_brent_usd,
         elasticity_assumptions=ElasticityAssumptions(pass_through_rate_to_pump=0.6,
                                                      gdp_sensitivity_per_10pct_oil_shock=-0.15),
+        scenario_type=req.scenario_type,
     ))
 
     # 3) procurement alternatives (never 500 the blend if the FX call hiccups)
@@ -1723,9 +1783,9 @@ async def _coordinate(req: FinalRecommendationRequest) -> FinalRecommendationRes
         f"Scenario: median Brent ${scenario.brent_price_distribution.p50:.1f}/bbl over {req.shock_duration_days}d "
         f"(pump p50 ₹{scenario.pump_price_impact.projected_p50_inr_per_litre:.1f}/L).",
         (f"Procurement: top alternative {top.supplier} at ${top.estimated_cost_usd_per_bbl:.1f}/bbl, "
-         f"corridor risk {top.corridor_risk_score:.0f}." if top else "Procurement: baseline retained."),
+         f"supplier-specific risk {risk.supplier_risk_scores.get(top.supplier, top.corridor_risk_score):.0f}." if top else "Procurement: baseline retained."),
         f"SPR: release {spr.total_drawdown_days} days, est. savings ${spr.savings_usd:,.0f}; "
-        f"reserve stays above floor = {spr.reserve_never_below_floor}.",
+        f"replenishment window estimated at {spr.replenishment_window_days} days.",
         f"Resolution: {tradeoff}.",
     ]
     summary = (
@@ -1836,6 +1896,24 @@ def spr_schedule_mock():
 
 
 # ── procurement routes ──────────────────────────────────────────────────────
+_FLEET_DATA = [
+    {"id": f"VSL_{i:03d}", "lat": 20.0 + (i * 0.5) % 15.0, "lon": 60.0 + (i * 1.5) % 25.0, "status": "underway"}
+    for i in range(35)
+]
+
+@app.get("/fleet")
+def get_fleet():
+    now = datetime.now(timezone.utc)
+    drift = (now.hour * 60 + now.minute) / 1440.0 * 0.5
+    drifted = []
+    for v in _FLEET_DATA:
+        drifted.append({
+            **v,
+            "lat": v["lat"] + drift,
+            "lon": v["lon"] + drift
+        })
+    return {"fleet": drifted}
+
 @app.get("/graph")
 def get_graph():
     nodes = [{"id": n, **d} for n, d in G.nodes(data=True)]
@@ -1932,5 +2010,38 @@ async def generate_policy():
         result = json.loads(response.text)
         return GeneratePolicyResponse(**result)
     except Exception as e:
-        log.exception(e)
-        raise HTTPException(status_code=500, detail=str(e))
+        log.warning("LLM Policy generation failed: %s. Falling back to template.", e)
+        fallback = {
+            "summary": "Fallback Policy: Activate predefined supply chain resilience measures.",
+            "actions": [
+                {
+                    "id": "POL-FB-1",
+                    "title": "Activate SPR Drawdown",
+                    "description": "Initiate predefined SPR drawdown to offset immediate price shocks.",
+                    "outcome": "Stabilized domestic pump prices.",
+                    "timeline": "Immediate",
+                    "category": "SPR",
+                    "impact": "high"
+                },
+                {
+                    "id": "POL-FB-2",
+                    "title": "Divert Procurement",
+                    "description": "Shift spot procurement away from high-risk corridors.",
+                    "outcome": "Reduced exposure to transit delays.",
+                    "timeline": "7 Days",
+                    "category": "Procurement",
+                    "impact": "medium"
+                },
+                {
+                    "id": "POL-FB-3",
+                    "title": "Diplomatic Outreach",
+                    "description": "Engage with suppliers for guaranteed loading windows.",
+                    "outcome": "Secured supply lines.",
+                    "timeline": "30 Days",
+                    "category": "Diplomatic",
+                    "impact": "medium"
+                }
+            ],
+            "confidence": 0.8
+        }
+        return GeneratePolicyResponse(**fallback)

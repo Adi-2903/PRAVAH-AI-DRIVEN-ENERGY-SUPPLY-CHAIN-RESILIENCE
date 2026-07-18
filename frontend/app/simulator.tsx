@@ -37,10 +37,10 @@ const CORRIDORS = [
 ];
 
 const SCENARIOS = [
-  { label: 'Low Risk Baseline', risk: 20, days: 7, sims: 3000, pass: 0.5, gdp: -0.10 },
-  { label: 'Moderate Disruption', risk: 55, days: 21, sims: 5000, pass: 0.65, gdp: -0.15 },
-  { label: 'Hormuz Closure (Severe)', risk: 88, days: 45, sims: 10000, pass: 0.85, gdp: -0.25 },
-  { label: '2022 Ukraine Analog', risk: 72, days: 30, sims: 5000, pass: 0.7, gdp: -0.18 },
+  { label: 'Low Risk Baseline', risk: 20, days: 7, sims: 3000, pass: 0.5, gdp: -0.10, scenario_type: 'base' as const },
+  { label: 'Moderate Disruption', risk: 55, days: 21, sims: 5000, pass: 0.65, gdp: -0.15, scenario_type: 'base' as const },
+  { label: 'Hormuz Closure (Severe)', risk: 88, days: 45, sims: 10000, pass: 0.85, gdp: -0.25, scenario_type: 'hormuz_closure' as const },
+  { label: 'OPEC+ Supply Cut', risk: 65, days: 60, sims: 8000, pass: 0.8, gdp: -0.20, scenario_type: 'opec_cut' as const },
 ];
 
 function TooltipIcon({ text }: { text: string }) {
@@ -102,6 +102,7 @@ const CustomFanTooltip = ({ active, payload, label }: any) => {
 export default function ScenarioSimulator() {
   const [corridor, setCorridor] = useState('hormuz');
   const [riskScore, setRiskScore] = useState(78);
+  const [scenarioType, setScenarioType] = useState<"base" | "hormuz_closure" | "opec_cut">('base');
   const [days, setDays] = useState(14);
   const [sims, setSims] = useState(5000);
   const [passThrough, setPassThrough] = useState(0.7);
@@ -141,8 +142,9 @@ export default function ScenarioSimulator() {
       price_elasticity_of_demand: -0.05,
       pass_through_rate_to_pump: passThrough,
       gdp_sensitivity_per_10pct_oil_shock: gdpSens,
-    }
-  }), [riskScore, corridor, days, sims, brent, passThrough, gdpSens]);
+    },
+    scenario_type: scenarioType
+  }), [riskScore, corridor, days, sims, brent, passThrough, gdpSens, scenarioType]);
 
   const run = useCallback(async () => {
     setLoading(true);
@@ -208,7 +210,7 @@ export default function ScenarioSimulator() {
 
   const applyPreset = (s: typeof SCENARIOS[0]) => {
     setRiskScore(s.risk); setDays(s.days); setSims(s.sims);
-    setPassThrough(s.pass); setGdpSens(s.gdp);
+    setPassThrough(s.pass); setGdpSens(s.gdp); setScenarioType(s.scenario_type);
   };
 
   const histData = useMemo(() => {

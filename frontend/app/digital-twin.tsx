@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, Line as RSMLine, ZoomableGroup } from 'react-simple-maps';
 import { Activity, Shield, Droplet, Anchor, Server, Zap, Radio, AlertTriangle, Cpu, Network, CheckCircle2, Navigation } from 'lucide-react';
 import DataFreshness from './components/data-freshness';
+import { serviceUrl } from './lib/api';
+import { useLiveData } from './lib/use-live-data';
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
@@ -17,7 +19,7 @@ interface Asset {
   utilization: number;
 }
 
-const ASSETS: Asset[] = [
+const FALLBACK_ASSETS: Asset[] = [
   // Refineries
   { id: 'ref-jamnagar', name: 'Jamnagar Complex', type: 'refinery', coordinates: [69.96, 22.34], status: 'optimal', capacity: '1.24M bpd', utilization: 92 },
   { id: 'ref-mumbai', name: 'Mumbai Refinery', type: 'refinery', coordinates: [72.87, 19.07], status: 'warning', capacity: '240K bpd', utilization: 78 },
@@ -34,7 +36,7 @@ const ASSETS: Asset[] = [
   { id: 'ves-pacific', name: 'Aframax Pacific', type: 'vessel', coordinates: [95.2, 5.8], status: 'optimal', capacity: '600K bbl', utilization: 100 },
 ];
 
-const ROUTES = [
+const FALLBACK_ROUTES = [
   { from: [50.1, 26.5], to: [69.82, 22.43], id: 'route-hormuz' }, // Ras Tanura to Sikka
   { from: [43.2, 12.5], to: [72.87, 19.07], id: 'route-bab' }, // Bab-el-Mandeb to Mumbai
   { from: [100.1, 3.2], to: [83.31, 17.68], id: 'route-malacca' }, // Malacca to Vizag
@@ -43,6 +45,88 @@ const ROUTES = [
 export default function DigitalTwin() {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [telemetryTick, setTelemetryTick] = useState(0);
+  const [assets, setAssets] = useState<Asset[]>(FALLBACK_ASSETS);
+  const [routes, setRoutes] = useState<any[]>(FALLBACK_ROUTES);
+
+  const { corridors, lastUpdated, loading: liveLoading } = useLiveData();
+
+  useEffect(() => {
+    let active = true;
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('pravah_access_token');
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const [graphRes, fleetRes] = await Promise.all([
+          fetch(serviceUrl('shared', '/graph'), { headers, signal: AbortSignal.timeout(4000) }).catch(() => null),
+          fetch(serviceUrl('shared', '/fleet'), { headers, signal: AbortSignal.timeout(4000) }).catch(() => null)
+        ]);
+        
+        let newAssets: Asset[] = [];
+        let newRoutes: any[] = [];
+        const nodeCoordsMap = new Map<string, [number, number]>();
+
+        if (graphRes?.ok) {
+          const graphData = await graphRes.json();
+          graphData.nodes?.forEach((n: any) => {
+            if (n.lat !== undefined && n.lon !== undefined) {
+              nodeCoordsMap.set(n.id, [n.lon, n.lat]);
+              let type: Asset['type'] = 'vessel'; // default fallback for strict type, replaced below
+              if (n.type === 'supplier' || n.type === 'port' || n.type === 'refinery' || n.type === 'spr') type = n.type as Asset['type'];
+              else type = 'vessel'; // server not allowed by Asset type, let's just use vessel or refinery. Actually Asset allows 'refinery' | 'spr' | 'port' | 'vessel'
+              
+              if (n.type === 'supplier') type = 'port';
+              
+              newAssets.push({
+                id: n.id,
+                name: n.display || n.id,
+                type: type,
+                coordinates: [n.lon, n.lat],
+                status: 'optimal',
+                capacity: n.capacity ? String(n.capacity) : 'N/A',
+                utilization: n.current_utilization || 0
+              });
+            }
+          });
+          
+          graphData.edges?.forEach((e: any) => {
+            const f = nodeCoordsMap.get(e.source);
+            const t = nodeCoordsMap.get(e.target);
+            if (f && t) {
+              newRoutes.push({ from: f, to: t, id: `${e.source}-${e.target}` });
+            }
+          });
+        }
+        
+        if (fleetRes?.ok) {
+          const fleetData = await fleetRes.json();
+          fleetData.fleet?.forEach((v: any) => {
+            newAssets.push({
+              id: v.id,
+              name: v.id,
+              type: 'vessel',
+              coordinates: [v.lon, v.lat],
+              status: v.risk > 60 ? 'critical' : (v.risk > 40 ? 'warning' : 'optimal'),
+              capacity: '2M bbl',
+              utilization: 100
+            });
+          });
+        }
+        
+        if (active && newAssets.length > 0) {
+          setAssets(newAssets);
+          if (newRoutes.length > 0) setRoutes(newRoutes);
+        }
+      } catch (e) {
+        console.warn("Telemetry fetch failed", e);
+      }
+    };
+    
+    fetchData();
+    const t = setInterval(fetchData, 30000);
+    return () => { active = false; clearInterval(t); };
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -105,7 +189,7 @@ export default function DigitalTwin() {
           <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#64748b', marginBottom: 16 }}>System Node Status</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {ASSETS.map((asset) => (
+              {assets.map((asset) => (
                 <div 
                   key={asset.id} 
                   onClick={() => setSelectedAsset(asset)}
@@ -198,7 +282,7 @@ export default function DigitalTwin() {
               </Geographies>
 
               {/* Shipping Routes */}
-              {ROUTES.map((route) => (
+              {routes.map((route) => (
                 <RSMLine
                   key={route.id}
                   from={route.from as [number, number]}
@@ -211,7 +295,7 @@ export default function DigitalTwin() {
               ))}
 
               {/* Assets / Nodes */}
-              {ASSETS.map((asset) => {
+              {assets.map((asset) => {
                 const color = getStatusColor(asset.status);
                 const isSelected = selectedAsset?.id === asset.id;
                 return (

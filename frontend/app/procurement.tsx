@@ -9,8 +9,8 @@ import { useLiveData } from './lib/use-live-data';
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
-// Geo coords keyed by graph node IDs
-const NODE_COORDS: Record<string, [number, number]> = {
+// Geo coords keyed by graph node IDs (fallback)
+const FALLBACK_NODE_COORDS: Record<string, [number, number]> = {
   SAU_ARAMCO:  [49.0, 24.0],
   IRQ_SOMO:    [47.8, 31.0],
   UAE_ADNOC:   [54.4, 23.4],
@@ -45,7 +45,7 @@ const NODE_COORDS: Record<string, [number, number]> = {
   REF_VIZAG:      [83.4, 17.6],
 };
 
-const NODE_LABELS: Record<string, string> = {
+const FALLBACK_NODE_LABELS: Record<string, string> = {
   SAU_ARAMCO: "Saudi Aramco", IRQ_SOMO: "Iraq SOMO", UAE_ADNOC: "UAE ADNOC",
   RUS_ROSNEFT: "Russia", USA_WTI: "USA WTI", NGA_NNPC: "Nigeria",
   KWT_KPC: "Kuwait", MEX_PEMEX: "Mexico",
@@ -111,6 +111,8 @@ export default function ProcurementModule() {
   const [isOffline, setIsOffline] = useState(false);
   const [rightOpen, setRightOpen] = useState(true);
   const [selectedRec, setSelectedRec] = useState(0);
+  const [nodeCoords, setNodeCoords] = useState<Record<string, [number, number]>>(FALLBACK_NODE_COORDS);
+  const [nodeLabels, setNodeLabels] = useState<Record<string, string>>({ ...FALLBACK_NODE_LABELS, ...ROUTE_LABELS });
 
   const handleWeight = (type: string, val: number) => {
     let c = costWeight, r = riskWeight, t = transitWeight;
@@ -140,6 +142,27 @@ export default function ProcurementModule() {
       setBaseline(data.current_supplier_baseline);
       setSelectedRec(0);
       setIsOffline(false);
+      
+      try {
+        const token = localStorage.getItem('pravah_access_token');
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const graphRes = await fetch(serviceUrl('procurement', '/graph'), { headers, signal: AbortSignal.timeout(4000) });
+        if (graphRes.ok) {
+          const graphData = await graphRes.json();
+          const newCoords = { ...FALLBACK_NODE_COORDS };
+          const newLabels = { ...FALLBACK_NODE_LABELS, ...ROUTE_LABELS };
+          graphData.nodes?.forEach((n: any) => {
+            if (n.lat !== undefined && n.lon !== undefined) newCoords[n.id] = [n.lon, n.lat];
+            if (n.display) newLabels[n.id] = n.display;
+          });
+          setNodeCoords(newCoords);
+          setNodeLabels(newLabels);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch graph coords", e);
+      }
     } catch (err: any) {
       if (err.status === 401 || (err.message && err.message.includes('401'))) {
         alert("Session expired or unauthorized. Please log in again.");
@@ -258,25 +281,25 @@ export default function ProcurementModule() {
   
               {/* Baseline path */}
               {basePath.map(([f,t], i) => {
-                const fc=NODE_COORDS[f], tc=NODE_COORDS[t];
+                const fc=nodeCoords[f], tc=nodeCoords[t];
                 return fc&&tc ? <Line key={`b${i}`} from={fc} to={tc} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5,4"/> : null;
               })}
   
               {/* Recommended path */}
               {recPath.map(([f,t], i) => {
-                const fc=NODE_COORDS[f], tc=NODE_COORDS[t];
+                const fc=nodeCoords[f], tc=nodeCoords[t];
                 return fc&&tc ? <Line key={`r${i}`} from={fc} to={tc} stroke="#2563eb" strokeWidth={3} strokeLinecap="round"/> : null;
               })}
   
               {/* Markers */}
-              {Object.keys(NODE_COORDS).map(id => {
-                const coords = NODE_COORDS[id];
+              {Object.keys(nodeCoords).map(id => {
+                const coords = nodeCoords[id];
                 const isRec  = recSet.has(id);
                 const isBase = baseSet.has(id);
                 const r    = isRec ? 7 : isBase ? 5 : 3;
                 const fill = isRec ? "#2563eb" : isBase ? "#94a3b8" : "#cbd5e1";
                 const stroke = isRec ? "#93c5fd" : "#e2e8f0";
-                const label = NODE_LABELS[id] || ROUTE_LABELS[id];
+                const label = nodeLabels[id];
                 return (
                   <Marker key={id} coordinates={coords}>
                     <circle r={r} fill={fill} stroke={stroke} strokeWidth={1.5}
@@ -312,7 +335,7 @@ export default function ProcurementModule() {
         {baseline && active && (
           <div style={{ position:"absolute", bottom:16, left:16, background:"rgba(255,255,255,0.94)", backdropFilter:"blur(12px)", border:"1px solid rgba(37,99,235,0.15)", borderRadius:14, padding:"12px 16px", minWidth:280, boxShadow:"0 8px 32px rgba(15,23,42,0.12)" }}>
             <div style={{ fontSize:9, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>
-              Impact: <span style={{ color:"#64748b" }}>{NODE_LABELS[baseline.supplier]||baseline.supplier}</span> → <span style={{ color:"#2563eb" }}>{NODE_LABELS[active.supplier]||active.supplier}</span>
+              Impact: <span style={{ color:"#64748b" }}>{nodeLabels[baseline.supplier]||baseline.supplier}</span> → <span style={{ color:"#2563eb" }}>{nodeLabels[active.supplier]||active.supplier}</span>
             </div>
             <div style={{ display:"flex", gap:14 }}>
               {[

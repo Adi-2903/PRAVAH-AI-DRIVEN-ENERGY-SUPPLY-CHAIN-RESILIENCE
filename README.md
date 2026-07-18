@@ -131,6 +131,33 @@ and how it ships now:
 
 Three views on one shared backend:
 
+```mermaid
+graph LR
+    classDef citizen fill:#22c55e,stroke:#15803d,stroke-width:2px,color:#fff
+    classDef analyst fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
+    classDef policy fill:#8b5cf6,stroke:#5b21b6,stroke-width:2px,color:#fff
+    classDef features fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px,color:#0f172a
+    
+    User([New User]) --> Chooser{Onboarding<br>Role Chooser}
+    
+    Chooser -->|General Public| C[Citizen View]:::citizen
+    Chooser -->|Supply Chain Expert| A[Procurement Analyst]:::analyst
+    Chooser -->|Government/Executive| P[Policy & SPR Planner]:::policy
+    
+    subgraph "Unauthenticated"
+        C
+    end
+    
+    subgraph "Authenticated Workspace"
+        A
+        P
+    end
+    
+    C -.-> F1[Headline Risk Score & Map]:::features
+    A -.-> F2[Ranked Supplier Tradeoffs & Export]:::features
+    P -.-> F3[Scenario Simulator & SPR Drawdowns]:::features
+```
+
   1. Citizen / general view (no login)
      One headline risk score, one line of plain-English explanation, a
      map. Nothing else.
@@ -156,38 +183,69 @@ Supporting details:
 4. ARCHITECTURE
 ================================================================================
 
-                       Live External Sources
-      -------------------------------------------------------
-      | EIA API | GDELT | aisstream.io | OFAC SDN | PPAC/MoP |
-      -------------------------------------------------------
-                            |
-                  Data Ingestion + Cache Layer
-              (scheduled jobs, snapshot-on-write,
-               "last synced at" timestamp on every field)
-                            |
-                   Risk Intelligence Layer
-                            |
-              -----------------------------
-              |                           |
-      Knowledge Graph                Vector DB (RAG)
-              |                           |
-              -----------------------------
-                            |
-                     Scenario Engine
-                            |
-         ---------------------------------------
-         |                |                    |
- Procurement Agent   SPR Optimizer Agent   Digital Twin
-         |                |                    |
-         ---------------------------------------
-                            |
-                  Coordinator Agent
-        (resolves conflicts, e.g. cost vs. security,
-         produces one final recommendation)
-                            |
-              -----------------------------------
-              | Citizen View | Analyst View | Policy View |
-              -----------------------------------------
+```mermaid
+graph TD
+    %% Define Styles
+    classDef frontend fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
+    classDef backend fill:#22c55e,stroke:#15803d,stroke-width:2px,color:#fff
+    classDef external fill:#8b5cf6,stroke:#5b21b6,stroke-width:2px,color:#fff
+    classDef contracts fill:#94a3b8,stroke:#475569,stroke-width:2px,color:#fff
+    classDef user fill:#f97316,stroke:#c2410c,stroke-width:2px,color:#fff
+    
+    User((User Browser)):::user
+    
+    subgraph "Next.js Frontend Application"
+        SPA[SPA Shell<br>React/Next.js]:::frontend
+        UI[UI Modules<br>Dashboard/Simulator/Maps]:::frontend
+        API_Client[API Service<br>TypeScript]:::frontend
+    end
+    
+    subgraph "FastAPI Monolith (api.py)"
+        Coordinator[Coordinator Engine<br>Python]:::backend
+        Risk[Risk Engine<br>Python]:::backend
+        Scenario[Scenario Engine<br>NumPy]:::backend
+        Procurement[Procurement Engine<br>NetworkX]:::backend
+        SPR[SPR Optimizer<br>NumPy]:::backend
+        Policy[Policy Generator<br>GenAI SDK]:::backend
+    end
+    
+    Contracts{{Shared Contracts<br>Pydantic}}:::contracts
+    
+    subgraph "External Services"
+        GDELT[(GDELT API)]:::external
+        EIA[(EIA API)]:::external
+        FX[(OpenExchangeRates)]:::external
+        Gemini[(Google Gemini AI)]:::external
+    end
+    
+    %% Relationships
+    User -->|HTTPS| SPA
+    SPA --> UI
+    UI --> API_Client
+    
+    API_Client -.->|REST / JSON| Coordinator
+    API_Client -.->|REST / JSON| Risk
+    API_Client -.->|REST / JSON| Scenario
+    API_Client -.->|REST / JSON| Procurement
+    API_Client -.->|REST / JSON| SPR
+    API_Client -.->|REST / JSON| Policy
+    
+    Coordinator --> Risk
+    Coordinator --> Scenario
+    Coordinator --> Procurement
+    Coordinator --> SPR
+    
+    Risk -.->|HTTPS| GDELT
+    Scenario -.->|HTTPS| EIA
+    Procurement -.->|HTTPS| FX
+    Policy -.->|HTTPS| Gemini
+    
+    Risk --> Contracts
+    Scenario --> Contracts
+    Procurement --> Contracts
+    SPR --> Contracts
+    Coordinator --> Contracts
+```
 
 ================================================================================
 5. BUILD PLAN — 12 STAGES
