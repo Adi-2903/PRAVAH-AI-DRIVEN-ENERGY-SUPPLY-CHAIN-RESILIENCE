@@ -54,7 +54,6 @@ function buildTicker(m: MarketData | null): { sym: string; val: string }[] {
     { sym: 'NAT-GAS', val: `$${m.nat_gas_usd.toFixed(2)}` },
   ];
 }
-}
 
 const ALERT_LEVEL_NUM: Record<string, number> = { low: 1, elevated: 2, high: 3, critical: 4 };
 

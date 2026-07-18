@@ -429,10 +429,10 @@ export default function ProcurementModule() {
                         </div>
                         <div>
                           <div style={{ fontSize:13, fontWeight:700, color:"#0f172a" }}>
-                            {NODE_LABELS[rec.supplier] || rec.supplier}
+                            {nodeLabels[rec.supplier] || rec.supplier}
                           </div>
                           <div style={{ fontSize:9, color:"#94a3b8", fontWeight:600, marginTop:1 }}>
-                            via {ROUTE_LABELS[rec.route] || rec.route} → {NODE_LABELS[rec.port] || rec.port}
+                            via {ROUTE_LABELS[rec.route] || rec.route} → {nodeLabels[rec.port] || rec.port}
                           </div>
                         </div>
                       </div>
@@ -475,7 +475,7 @@ export default function ProcurementModule() {
                 <div style={{ fontSize:9, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>Current Baseline</div>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <div>
-                    <div style={{ fontSize:12, fontWeight:700, color:"#374151" }}>{NODE_LABELS[baseline.supplier]||baseline.supplier}</div>
+                    <div style={{ fontSize:12, fontWeight:700, color:"#374151" }}>{nodeLabels[baseline.supplier]||baseline.supplier}</div>
                     <div style={{ fontSize:9, color:"#94a3b8", marginTop:2 }}>Score: {baseline.composite_score.toFixed(3)}</div>
                   </div>
                   <div style={{ display:"flex", gap:10, fontSize:11, color:"#64748b", fontVariantNumeric:"tabular-nums" }}>
