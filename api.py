@@ -69,7 +69,7 @@ class SimulateRequest(BaseModel):
     num_simulations: int = Field(ge=1000, le=20000)
     current_brent_usd: float
     elasticity_assumptions: ElasticityAssumptions
-    scenario_type: Literal["base", "hormuz_closure", "opec_cut"] = "base"
+    scenario_type: Literal["base", "hormuz_closure", "opec_cut", "redsea_suspension"] = "base"
 
 
 class PriceDistribution(BaseModel):
@@ -865,6 +865,20 @@ def _simulate(req: SimulateRequest) -> SimulateResponse:
         theta = S0 * (1 + 0.3 * risk_factor)
         sigma = CALIBRATED_VOLATILITY + (0.02 * risk_factor)
         kappa = 0.2
+    elif req.scenario_type == "redsea_suspension":
+        # Unlike Hormuz (supply removed at source) or an OPEC+ cut (policy-driven
+        # volume reduction), a Red Sea/Bab-el-Mandeb suspension doesn't take crude
+        # off the market — vessels reroute via the Cape of Good Hope instead. That
+        # adds ~10-14 days transit plus freight/insurance premium, which shows up
+        # as a STRUCTURAL cost floor that applies even at low geopolitical risk
+        # (unlike the other two scenarios, where theta collapses back to S0 at
+        # risk_factor=0). The risk-scaled component is deliberately smaller than
+        # Hormuz, and kappa is slower than opec_cut — cost embeds gradually as
+        # cargoes actually divert, rather than repricing instantly.
+        structural_freight_premium = 0.04  # ~4% baseline landed-cost uplift from Cape rerouting
+        theta = S0 * (1 + structural_freight_premium + 0.25 * risk_factor)
+        sigma = CALIBRATED_VOLATILITY + (0.06 * risk_factor)
+        kappa = 0.07
     else:
         theta = S0 * (1 + 0.5 * risk_factor)
         kappa = 0.1
@@ -1702,7 +1716,7 @@ class FinalRecommendationRequest(BaseModel):
     as_of: Optional[datetime] = None
     current_brent_usd: float = 84.0
     shock_duration_days: int = Field(default=14, ge=2, le=60)
-    scenario_type: Literal["base", "hormuz_closure", "opec_cut"] = "base"
+    scenario_type: Literal["base", "hormuz_closure", "opec_cut", "redsea_suspension"] = "base"
 
 
 class Resolution(BaseModel):
@@ -1964,23 +1978,119 @@ class GeneratePolicyResponse(BaseModel):
     actions: List[PolicyAction]
     confidence: float
 
+def _deterministic_policy_fallback(corridors=None, market=None, recommendation=None) -> dict:
+    """Template-based policy generator. Used whenever Gemini is unavailable
+    (no key, network error, malformed response). Unlike a static canned
+    response, this reads the SAME live risk/market/recommendation data the
+    Gemini prompt would have used, so the page still reflects current
+    conditions even with zero LLM calls — consistent with the rest of the
+    backend's graceful-degradation pattern (EIA -> _BRENT_CSV, GDELT ->
+    _RISK_FIXTURES)."""
+    if corridors is None or market is None or recommendation is None:
+        # Live intelligence itself was unreachable (not just Gemini) — last-resort
+        # static text so the endpoint still returns 200 instead of a 500.
+        return {
+            "summary": "Live intelligence unavailable. Displaying baseline resilience posture.",
+            "actions": [
+                {"id": "POL-FB-1", "title": "Maintain SPR Readiness",
+                 "description": "Hold current reserve levels pending restored live risk/price feeds.",
+                 "outcome": "No premature drawdown while visibility is degraded.",
+                 "timeline": "Immediate", "category": "SPR", "impact": "medium"},
+                {"id": "POL-FB-2", "title": "Continue Standard Procurement",
+                 "description": "No corridor-specific rerouting signal available; maintain existing supplier mix.",
+                 "outcome": "Avoid unnecessary cost from acting on stale data.",
+                 "timeline": "7 Days", "category": "Procurement", "impact": "low"},
+                {"id": "POL-FB-3", "title": "Restore Intelligence Feeds",
+                 "description": "Investigate EIA/GDELT/market connectivity before next policy cycle.",
+                 "outcome": "Resume live-data-driven policy generation.",
+                 "timeline": "24 Hours", "category": "Diplomatic", "impact": "medium"},
+            ],
+            "confidence": 0.3,
+        }
+
+    hormuz_score = corridors[0].score
+    redsea_score = corridors[1].score
+    peak_corridor = corridors[0] if hormuz_score >= redsea_score else corridors[1]
+    peak_score = max(hormuz_score, redsea_score)
+    brent = market.get("brent_usd", 84.0)
+
+    summary = (
+        f"Live Assessment (template — LLM unavailable): Brent at ${brent:.2f}/bbl. "
+        f"Hormuz risk {hormuz_score:.0f}/100, Red Sea risk {redsea_score:.0f}/100. "
+        f"{recommendation.summary}"
+    )
+
+    # Action 1 — SPR, scaled to the peak corridor risk actually observed.
+    if peak_score >= 70:
+        spr_action = {"id": "POL-FB-1", "title": "Activate SPR Drawdown",
+                      "description": f"{peak_corridor.corridor.title()} risk at {peak_score:.0f}/100 — initiate scheduled SPR drawdown to offset price pressure.",
+                      "outcome": "Stabilized domestic pump prices through the shock window.",
+                      "timeline": "Immediate", "category": "SPR", "impact": "critical"}
+    elif peak_score >= 45:
+        spr_action = {"id": "POL-FB-1", "title": "Prepare SPR Contingency",
+                      "description": f"{peak_corridor.corridor.title()} risk at {peak_score:.0f}/100 — pre-stage drawdown schedule without releasing reserves yet.",
+                      "outcome": "Faster response if risk escalates further.",
+                      "timeline": "7 Days", "category": "SPR", "impact": "high"}
+    else:
+        spr_action = {"id": "POL-FB-1", "title": "Maintain SPR Readiness",
+                      "description": f"Corridor risk contained (peak {peak_score:.0f}/100) — hold current reserve levels.",
+                      "outcome": "Reserves preserved for a higher-risk window.",
+                      "timeline": "Ongoing", "category": "SPR", "impact": "medium"}
+
+    # Action 2 — Procurement, driven by which corridor is actually elevated.
+    if redsea_score >= 60:
+        proc_action = {"id": "POL-FB-2", "title": "Divert Procurement via Cape Route",
+                       "description": f"Red Sea risk at {redsea_score:.0f}/100 — reroute spot cargoes via the Cape of Good Hope despite added transit time.",
+                       "outcome": "Reduced exposure to Bab-el-Mandeb/Red Sea disruption.",
+                       "timeline": "7 Days", "category": "Procurement", "impact": "high"}
+    elif hormuz_score >= 60:
+        proc_action = {"id": "POL-FB-2", "title": "Diversify Away From Hormuz-Dependent Suppliers",
+                       "description": f"Hormuz risk at {hormuz_score:.0f}/100 — increase share of non-Gulf crude in the procurement mix.",
+                       "outcome": "Lower concentration risk in a single chokepoint.",
+                       "timeline": "14 Days", "category": "Procurement", "impact": "high"}
+    else:
+        proc_action = {"id": "POL-FB-2", "title": "Continue Standard Procurement Routing",
+                       "description": "No corridor currently elevated enough to justify rerouting cost.",
+                       "outcome": "Maintain lowest-cost supply mix.",
+                       "timeline": "Ongoing", "category": "Procurement", "impact": "low"}
+
+    diplo_action = {"id": "POL-FB-3", "title": "Diplomatic Outreach",
+                    "description": f"Engage {peak_corridor.corridor.title()}-adjacent suppliers for guaranteed loading windows given current recommendation: {recommendation.summary[:120]}",
+                    "outcome": "Secured supply lines independent of market volatility.",
+                    "timeline": "30 Days", "category": "Diplomatic", "impact": "medium"}
+
+    confidence = round(max(0.4, min(0.75, 0.75 - (peak_score / 100.0) * 0.2)), 2)
+
+    return {
+        "summary": summary,
+        "actions": [spr_action, proc_action, diplo_action],
+        "confidence": confidence,
+    }
+
+
 @app.post("/generate-policy", response_model=GeneratePolicyResponse)
 async def generate_policy():
+    # Fetch live intelligence first, independent of the Gemini call — this way
+    # a Gemini outage still leaves us with real corridor/market/recommendation
+    # data to build the deterministic fallback from, instead of losing it.
+    corridors = market = recommendation = None
     try:
         corridors = [build_risk_response(c, use_live=True) for c in ("hormuz", "redsea", "cape", "domestic")]
         market = await fetch_live_market_data()
-        
-        # We need the final recommendation summary as well
-        rec_req = FinalRecommendationRequest(corridor="hormuz")
-        recommendation = await _coordinate(rec_req)
+        recommendation = await _coordinate(FinalRecommendationRequest(corridor="hormuz"))
+    except Exception as e:
+        log.warning("Live intelligence fetch failed for policy generation: %s", e)
 
+    try:
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY not configured")
-        
+        if corridors is None or market is None or recommendation is None:
+            raise ValueError("Live intelligence unavailable; skipping LLM call")
+
         genai.configure(api_key=gemini_api_key)
         model = genai.GenerativeModel("gemini-2.5-flash", generation_config={"response_mime_type": "application/json"})
-        
+
         prompt = f"""
         Act as the Indian Ministry of Petroleum's AI advisor.
         Current Market: Brent ${market["brent_usd"]}
@@ -2005,43 +2115,10 @@ async def generate_policy():
             "confidence": 0.95
         }}
         """
-        
+
         response = model.generate_content(prompt)
         result = json.loads(response.text)
         return GeneratePolicyResponse(**result)
     except Exception as e:
-        log.warning("LLM Policy generation failed: %s. Falling back to template.", e)
-        fallback = {
-            "summary": "Fallback Policy: Activate predefined supply chain resilience measures.",
-            "actions": [
-                {
-                    "id": "POL-FB-1",
-                    "title": "Activate SPR Drawdown",
-                    "description": "Initiate predefined SPR drawdown to offset immediate price shocks.",
-                    "outcome": "Stabilized domestic pump prices.",
-                    "timeline": "Immediate",
-                    "category": "SPR",
-                    "impact": "high"
-                },
-                {
-                    "id": "POL-FB-2",
-                    "title": "Divert Procurement",
-                    "description": "Shift spot procurement away from high-risk corridors.",
-                    "outcome": "Reduced exposure to transit delays.",
-                    "timeline": "7 Days",
-                    "category": "Procurement",
-                    "impact": "medium"
-                },
-                {
-                    "id": "POL-FB-3",
-                    "title": "Diplomatic Outreach",
-                    "description": "Engage with suppliers for guaranteed loading windows.",
-                    "outcome": "Secured supply lines.",
-                    "timeline": "30 Days",
-                    "category": "Diplomatic",
-                    "impact": "medium"
-                }
-            ],
-            "confidence": 0.8
-        }
-        return GeneratePolicyResponse(**fallback)
+        log.warning("LLM Policy generation failed: %s. Falling back to data-driven template.", e)
+        return GeneratePolicyResponse(**_deterministic_policy_fallback(corridors, market, recommendation))

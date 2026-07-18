@@ -52,10 +52,10 @@ export interface LiveCorridor {
 // Published real-world reference figures (facts, NOT live telemetry).
 // Transit volumes are widely-cited EIA approximations for each chokepoint.
 const CORRIDOR_META: Record<string, { name: string; short: string; throughput: string | null }> = {
-  hormuz:   { name: 'Strait of Hormuz',        short: 'HORMUZ',   throughput: '≈21 Mb/d' },
-  redsea:   { name: 'Red Sea / Bab-el-Mandeb', short: 'RED SEA',  throughput: '≈9 Mb/d' },
-  cape:     { name: 'Cape of Good Hope',       short: 'CAPE',     throughput: '≈6 Mb/d' },
-  domestic: { name: 'Domestic Pipeline',       short: 'DOMESTIC', throughput: null },
+  hormuz: { name: 'Strait of Hormuz', short: 'HORMUZ', throughput: '≈21 Mb/d' },
+  redsea: { name: 'Red Sea / Bab-el-Mandeb', short: 'RED SEA', throughput: '≈9 Mb/d' },
+  cape: { name: 'Cape of Good Hope', short: 'CAPE', throughput: '≈6 Mb/d' },
+  domestic: { name: 'Domestic Pipeline', short: 'DOMESTIC', throughput: null },
 };
 
 // Throughput weights (Mb/d) for the composite index — maritime chokepoints only.

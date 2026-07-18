@@ -57,12 +57,12 @@ export default function DigitalTwin() {
         const token = localStorage.getItem('pravah_access_token');
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        
+
         const [graphRes, fleetRes] = await Promise.all([
           fetch(serviceUrl('shared', '/graph'), { headers, signal: AbortSignal.timeout(4000) }).catch(() => null),
           fetch(serviceUrl('shared', '/fleet'), { headers, signal: AbortSignal.timeout(4000) }).catch(() => null)
         ]);
-        
+
         let newAssets: Asset[] = [];
         let newRoutes: any[] = [];
         const nodeCoordsMap = new Map<string, [number, number]>();
@@ -75,9 +75,9 @@ export default function DigitalTwin() {
               let type: Asset['type'] = 'vessel'; // default fallback for strict type, replaced below
               if (n.type === 'supplier' || n.type === 'port' || n.type === 'refinery' || n.type === 'spr') type = n.type as Asset['type'];
               else type = 'vessel'; // server not allowed by Asset type, let's just use vessel or refinery. Actually Asset allows 'refinery' | 'spr' | 'port' | 'vessel'
-              
+
               if (n.type === 'supplier') type = 'port';
-              
+
               newAssets.push({
                 id: n.id,
                 name: n.display || n.id,
@@ -89,7 +89,7 @@ export default function DigitalTwin() {
               });
             }
           });
-          
+
           graphData.edges?.forEach((e: any) => {
             const f = nodeCoordsMap.get(e.source);
             const t = nodeCoordsMap.get(e.target);
@@ -98,7 +98,7 @@ export default function DigitalTwin() {
             }
           });
         }
-        
+
         if (fleetRes?.ok) {
           const fleetData = await fleetRes.json();
           fleetData.fleet?.forEach((v: any) => {
@@ -113,7 +113,7 @@ export default function DigitalTwin() {
             });
           });
         }
-        
+
         if (active && newAssets.length > 0) {
           setAssets(newAssets);
           if (newRoutes.length > 0) setRoutes(newRoutes);
@@ -122,7 +122,7 @@ export default function DigitalTwin() {
         console.warn("Telemetry fetch failed", e);
       }
     };
-    
+
     fetchData();
     const t = setInterval(fetchData, 30000);
     return () => { active = false; clearInterval(t); };
@@ -157,7 +157,7 @@ export default function DigitalTwin() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#020617', color: '#f8fafc', overflow: 'hidden' }}>
-      
+
       {/* Header */}
       <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(2,6,23,0.8)', backdropFilter: 'blur(12px)', zIndex: 10 }}>
         <div>
@@ -183,18 +183,18 @@ export default function DigitalTwin() {
 
       {/* Main Content */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        
+
         {/* Sidebar */}
         <div style={{ width: 340, background: '#0f172a', borderRight: '1px solid rgba(255,255,255,0.06)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#64748b', marginBottom: 16 }}>System Node Status</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {assets.map((asset) => (
-                <div 
-                  key={asset.id} 
+                <div
+                  key={asset.id}
                   onClick={() => setSelectedAsset(asset)}
-                  style={{ 
-                    padding: 12, borderRadius: 10, background: selectedAsset?.id === asset.id ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)', 
+                  style={{
+                    padding: 12, borderRadius: 10, background: selectedAsset?.id === asset.id ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)',
                     border: `1px solid ${selectedAsset?.id === asset.id ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)'}`,
                     cursor: 'pointer', transition: 'all 0.2s',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between'
@@ -216,7 +216,7 @@ export default function DigitalTwin() {
               ))}
             </div>
           </div>
-          
+
           {selectedAsset && (
             <div style={{ padding: 24, flex: 1, background: 'linear-gradient(180deg, rgba(15,23,42,1) 0%, rgba(2,6,23,1) 100%)' }}>
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#60a5fa', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -224,7 +224,7 @@ export default function DigitalTwin() {
               </div>
               <h3 style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 4 }}>{selectedAsset.name}</h3>
               <p style={{ fontSize: 12, color: '#94a3b8', textTransform: 'capitalize', marginBottom: 20 }}>{selectedAsset.type} Node</p>
-              
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
                 <div style={{ background: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
                   <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>Status</div>
@@ -244,7 +244,7 @@ export default function DigitalTwin() {
                   </div>
                 </div>
               </div>
-              
+
               {selectedAsset.status === 'critical' && (
                 <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', padding: 16, borderRadius: 10 }}>
                   <div style={{ display: 'flex', gap: 10, color: '#f87171', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>
@@ -259,18 +259,18 @@ export default function DigitalTwin() {
 
         {/* Map Container */}
         <div style={{ flex: 1, position: 'relative', background: 'radial-gradient(circle at center, #0f172a 0%, #020617 100%)' }}>
-          
+
           <ComposableMap projection="geoMercator" projectionConfig={{ scale: 150 }} style={{ width: '100%', height: '100%' }}>
             <ZoomableGroup center={[20, 20]} zoom={1.2}>
               <Geographies geography={geoUrl}>
                 {({ geographies }) =>
                   geographies.map((geo) => (
-                    <Geography 
-                      key={geo.rsmKey} 
-                      geography={geo} 
-                      fill="#1e293b" 
-                      stroke="#475569" 
-                      strokeWidth={1.5} 
+                    <Geography
+                      key={geo.rsmKey}
+                      geography={geo}
+                      fill="#1e293b"
+                      stroke="#475569"
+                      strokeWidth={1.5}
                       style={{
                         default: { outline: 'none' },
                         hover: { fill: '#334155', outline: 'none' },
@@ -307,11 +307,11 @@ export default function DigitalTwin() {
                     {asset.status === 'critical' && (
                       <circle cx={0} cy={0} r={9} fill="none" stroke={color} strokeWidth={1.5} className="pulse-dot" />
                     )}
-                    <text 
-                      textAnchor="middle" 
-                      y={-12} 
-                      style={{ 
-                        fontFamily: 'system-ui', fontSize: isSelected ? 12 : 9, fill: isSelected ? '#fff' : 'rgba(255,255,255,0.6)', 
+                    <text
+                      textAnchor="middle"
+                      y={-12}
+                      style={{
+                        fontFamily: 'system-ui', fontSize: isSelected ? 12 : 9, fill: isSelected ? '#fff' : 'rgba(255,255,255,0.6)',
                         fontWeight: isSelected ? 800 : 600, pointerEvents: 'none', filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.8))'
                       }}
                     >
@@ -344,12 +344,12 @@ export default function DigitalTwin() {
 
         </div>
       </div>
-      
+
       {/* Footer / Telemetry stream */}
       <div style={{ height: 32, background: '#020617', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', padding: '0 24px', fontSize: 10, fontFamily: 'var(--font-mono)', color: '#64748b', gap: 24 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#34d399' }}><CheckCircle2 style={{ width: 12, height: 12 }} /> SECURE CONNECTION</span>
         {/* eslint-disable-next-line react-hooks/purity */}
-        <span>ID: TWIN-{Math.random().toString(36).substring(2,8).toUpperCase()}</span>
+        <span>ID: TWIN-{Math.random().toString(36).substring(2, 8).toUpperCase()}</span>
         <span>UPTIME: 99.99%</span>
         <span>LAT: 22.34 LON: 69.96</span>
         <span style={{ flex: 1, textAlign: 'right', color: '#3b82f6' }}>AWAITING COMMAND OVERRIDE...</span>

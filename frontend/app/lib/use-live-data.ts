@@ -32,9 +32,9 @@ export function useLiveData(pollingIntervalMs = 60000) {
         loadMarket(),
         loadCorridors()
       ]);
-      
+
       const composite = corridorsRes.data.length ? compositeIndex(corridorsRes.data) : 0;
-      
+
       setState({
         market: marketRes.data,
         corridors: corridorsRes.data,
