@@ -39,8 +39,9 @@ const CORRIDORS = [
 const SCENARIOS = [
   { label: 'Low Risk Baseline', risk: 20, days: 7, sims: 3000, pass: 0.5, gdp: -0.10, scenario_type: 'base' as const },
   { label: 'Moderate Disruption', risk: 55, days: 21, sims: 5000, pass: 0.65, gdp: -0.15, scenario_type: 'base' as const },
-  { label: 'Hormuz Closure (Severe)', risk: 88, days: 45, sims: 10000, pass: 0.85, gdp: -0.25, scenario_type: 'hormuz_closure' as const },
+  { label: 'Hormuz Closure (Severe)', risk: 88, days: 45, sims: 10000, pass: 0.85, gdp: -0.25, scenario_type: 'hormuz_closure' as const, corridor: 'hormuz' },
   { label: 'OPEC+ Supply Cut', risk: 65, days: 60, sims: 8000, pass: 0.8, gdp: -0.20, scenario_type: 'opec_cut' as const },
+  { label: 'Red Sea Reroute (Cape Diversion)', risk: 65, days: 35, sims: 8000, pass: 0.6, gdp: -0.12, scenario_type: 'redsea_suspension' as const, corridor: 'redsea' },
 ];
 
 function TooltipIcon({ text }: { text: string }) {
@@ -102,7 +103,7 @@ const CustomFanTooltip = ({ active, payload, label }: any) => {
 export default function ScenarioSimulator() {
   const [corridor, setCorridor] = useState('hormuz');
   const [riskScore, setRiskScore] = useState(78);
-  const [scenarioType, setScenarioType] = useState<"base" | "hormuz_closure" | "opec_cut">('base');
+  const [scenarioType, setScenarioType] = useState<"base" | "hormuz_closure" | "opec_cut" | "redsea_suspension">('base');
   const [days, setDays] = useState(14);
   const [sims, setSims] = useState(5000);
   const [passThrough, setPassThrough] = useState(0.7);
@@ -115,7 +116,7 @@ export default function ScenarioSimulator() {
   const [dataStatus, setDataStatus] = useState<DataStatus | null>(null);
 
   const { market, corridors, refresh: liveRefresh, loading: liveLoading, error: liveError, lastUpdated } = useLiveData();
-  
+
   useEffect(() => {
     if (market?.brent_usd && brent === 82.0) {
       setBrent(market.brent_usd);
@@ -211,6 +212,7 @@ export default function ScenarioSimulator() {
   const applyPreset = (s: typeof SCENARIOS[0]) => {
     setRiskScore(s.risk); setDays(s.days); setSims(s.sims);
     setPassThrough(s.pass); setGdpSens(s.gdp); setScenarioType(s.scenario_type);
+    if ('corridor' in s && s.corridor) setCorridor(s.corridor);
   };
 
   const histData = useMemo(() => {
@@ -227,7 +229,7 @@ export default function ScenarioSimulator() {
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1600, margin: '0 auto' }}>
-      
+
       {/* Header Panel */}
       <div className="card" style={{ padding: 24, marginBottom: 24, display: 'flex', flexWrap: 'wrap', gap: 24, justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -251,7 +253,7 @@ export default function ScenarioSimulator() {
               </div>
             </div>
           )}
-          
+
           <div>
             <div className="label-caps" style={{ marginBottom: 6 }}>Select Corridor</div>
             <select
@@ -315,10 +317,10 @@ export default function ScenarioSimulator() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: 24 }}>
-        
+
         {/* Left Column: Controls */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          
+
           <div className="card">
             <div className="card-header">
               <span className="label-caps" style={{ color: '#0f172a' }}>Shock Parameters</span>
@@ -359,7 +361,7 @@ export default function ScenarioSimulator() {
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 800, color: k.color }}>{k.val}</span>
                   </div>
                 ))}
-                
+
                 <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.4)', marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                   <div>Source: <span style={{ color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>{result.data_source || 'fallback_cache'}</span></div>
                   <div>Runs: {result.num_simulations_run.toLocaleString()} · #{runCount}</div>
@@ -371,7 +373,7 @@ export default function ScenarioSimulator() {
 
         {/* Right Column: Charts */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          
+
           <div className="card" style={{ position: 'relative' }}>
             <div className="card-header">
               <div>
@@ -386,7 +388,7 @@ export default function ScenarioSimulator() {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e' }} /> P10 (Best)</span>
               </div>
             </div>
-            
+
             <div style={{ padding: 24, height: 420, transition: 'opacity 0.3s', opacity: loading ? 0.4 : 1 }}>
               {result && (
                 <ResponsiveContainer width="100%" height="100%">
@@ -422,7 +424,7 @@ export default function ScenarioSimulator() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-            
+
             {/* Pump Price Impact */}
             <div className="card">
               <div className="card-header"><span className="label-caps" style={{ color: '#0f172a' }}>Pump Price Impact</span></div>

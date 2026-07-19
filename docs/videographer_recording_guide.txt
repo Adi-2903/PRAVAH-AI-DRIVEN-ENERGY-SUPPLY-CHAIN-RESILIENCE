@@ -1,0 +1,172 @@
+================================================================================
+PRAVAH FRONTEND MVP DEMO - VIDEOGRAPHER RECORDING GUIDE & WALKTHROUGH SCRIPT
+================================================================================
+
+This document details the exact visual cues, camera focus points, and narration
+scripts required to record a high-quality demonstration video of the PRAVAH
+AI-driven energy supply chain resilience platform.
+
+--------------------------------------------------------------------------------
+PRODUCTION TIPS FOR THE VIDEOGRAPHER
+--------------------------------------------------------------------------------
+1. Capture Resolution: Record in standard 1080p (1920x1080) or 4K (3840x2160).
+2. Browser Settings: Run the browser in full-screen mode (F11 in Chrome/Edge)
+   to hide browser bars and bookmarks.
+3. Mouse Movement: Move the cursor slowly, smoothly, and in straight lines.
+   Pause for 1-2 seconds on hover targets to allow tooltips to fully render.
+4. Screen Transitions: Ensure camera exposure and white balance adjust smoothly
+   between the application's light themes and the premium dark themes.
+
+--------------------------------------------------------------------------------
+SCENE 1: ONBOARDING & THE CITIZEN VIEW
+--------------------------------------------------------------------------------
+[Visual Actions]
+- Start on the landing page of the application (Citizen View / Public page).
+- Allow the page to load and capture the animated Risk Index Gauge as it
+  sweeps to its current value (e.g., 78/100).
+- Hover over the simple SVG world map highlighting the critical maritime 
+  corridors (Strait of Hormuz, Red Sea, Cape of Good Hope) connecting to India.
+- Scroll down to show the published reference cards:
+  * Brent Crude Price Reference
+  * 88% Import Dependency (PPAC reference)
+  * 9.5 Days Strategic Petroleum Reserve Cover (ISPRL reference)
+- ACTION: Click the blue "Go deeper — Analyst View" button at the bottom of the
+  page, or select "Analyst View" from the top-right header tier selector.
+
+[Narration Script]
+"We begin on the public Citizen View. This dashboard provides immediate 
+transparency into India's crude import vulnerability, displaying a real-time 
+Composite Risk Index and highlighting key corridors like the Strait of Hormuz 
+and the Red Sea. We now transition to the Analyst View to inspect the active 
+threat vectors."
+
+--------------------------------------------------------------------------------
+SCENE 2: COMMAND CENTER (MAIN DASHBOARD)
+--------------------------------------------------------------------------------
+[Visual Actions]
+- Show the transition to the full Analyst Command Center.
+- Point the camera at the top header displaying the "Live backend" status badge.
+- Highlight the 4 main KPI cards at the top of the dashboard:
+  * Import Dependency (88%)
+  * Hormuz Transit (~42%)
+  * SPR Cover (9.5 days)
+  * Composite Risk Score (showing current score/100 and primary driver)
+- Scroll down to the Corridor Risk Monitor table showing scores, alert levels,
+  and volatilities for each corridor.
+- Scroll to the Scoring Events Feed showing the latest geopolitical news events.
+- ACTION: Click on one of the feed items to expand it, revealing its source
+  details and weight composition.
+
+[Narration Script]
+"In the Command Center, analysts track real-time threat signals. The Composite 
+Risk Index is calculated dynamically based on live news events and risk scores 
+across India's supply routes. From here, we can select individual corridors to 
+drill down into the underlying intelligence."
+
+--------------------------------------------------------------------------------
+SCENE 3: RISK INTELLIGENCE PAGE
+--------------------------------------------------------------------------------
+[Visual Actions]
+- ACTION: Click on "Risk Intelligence" in the left sidebar.
+- Scroll through the corridor details, demonstrating the confidence metrics 
+  and source articles that contribute to the current risk score.
+
+[Narration Script]
+"The Risk Intelligence page exposes the raw data driving these scores, 
+compiling news feeds, confidence signals, and event weightings to give 
+policy-makers a clear audit trail."
+
+--------------------------------------------------------------------------------
+SCENE 4: SCENARIO MODELLER (THE CORE SIMULATION)
+--------------------------------------------------------------------------------
+[Visual Actions]
+- ACTION: Click on "Scenario Modeller" in the left sidebar. Note the visual
+  transition to the premium dark-mode interface.
+- Highlight the inputs panel on the left: Sliders for Risk Score, Shock 
+  Duration, and Economic Elasticity Assumptions.
+- ACTION: Click the "Hormuz Closure (Severe)" preset in the left rail. Show
+  the sliders automatically snapping to their preset values.
+- Record the animation of the Projected Brent Crude Path fan chart as the
+  Monte Carlo simulation runs, displaying the P10, P50, and P90 price paths.
+- Scroll down to record the three bottom cards:
+  * Pump Price Impact bar chart
+  * GDP Impact Range levels
+  * Final-Day price distribution histogram
+- ACTION: Click the "PDF" export button at the top-right to download the
+  scenario brief.
+
+[Narration Script]
+"Under the Scenario Modeller, we simulate the financial shocks of physical 
+supply disruptions. Selecting the 'Hormuz Closure' preset runs a Monte Carlo 
+simulation across 4,000 runs, plotting the P10, P50, and P90 price path 
+distributions alongside pump price and macroeconomic GDP forecasts. We can 
+then export this brief directly as a PDF."
+
+--------------------------------------------------------------------------------
+SCENE 5: STRATEGIC RESERVES (SPR) OPTIMIZATION
+--------------------------------------------------------------------------------
+[Visual Actions]
+- ACTION: Click on "Strategic Reserves" in the left sidebar.
+- Highlight the left rail constraints sliders: Planning Horizon, Safety Floor,
+  and Max Daily Drawdown.
+- Point the camera at the "Value Optimized vs. Baseline" card showing computed
+  savings in millions of dollars and percentage improvements.
+- Record the Composed Chart showing the optimal drawdown trajectory (Area plot
+  for Reserve Level staying above the safety floor, Bar chart for daily
+  drawdown, and Line chart for price forecast).
+- Scroll down to the day-by-day release table.
+- ACTION: Click the "Export CSV" button.
+
+[Narration Script]
+"Next is the Strategic Reserves Optimizer. Using the median price path from 
+our simulator, an LP solver calculates the most cost-efficient daily drawdown 
+schedule. It front-loads releases to avoid purchasing crude during peak price 
+spikes while strictly respecting safety floor constraints."
+
+--------------------------------------------------------------------------------
+SCENE 6: PROCUREMENT & ALTERNATIVE ROUTING
+--------------------------------------------------------------------------------
+[Visual Actions]
+- ACTION: Click on "Procurement" in the left sidebar (view returns to light mode).
+- Point to the Optimization Weights sliders: Cost Efficiency, Security/Risk,
+  and Transit Speed.
+- ACTION: Drag the Security/Risk slider to 80% and show the "Recalculating..."
+  status spinner.
+- Record the SVG world map: note how the blue solid line reroutes alternative
+  paths (e.g., around the Cape of Good Hope) while the gray dashed line marks
+  the original Strait of Hormuz baseline.
+- Focus on the Ranked Alternatives list on the right, showing alternative
+  suppliers, crude grade compatibility, estimated costs, and reasoning text.
+- ACTION: Click the "PDF" export button on the ranked list.
+
+[Narration Script]
+"The Procurement module determines optimal alternative routing. By adjusting 
+our optimization weights—for instance, prioritizing Security over Cost—the 
+NetworkX pathing algorithm penalizes risk corridors. It computes alternative 
+routes, such as detouring around the Cape of Good Hope, and ranks backup 
+suppliers by compatibility and cost."
+
+--------------------------------------------------------------------------------
+SCENE 7: POLICY MAKER VIEW
+--------------------------------------------------------------------------------
+[Visual Actions]
+- ACTION: Select "Policy Maker View" from the top-right header tier selector,
+  or navigate directly to /policy-maker.
+- Show the secure login modal screen.
+- ACTION: Enter credentials:
+  * Email: pm@pravah.gov
+  * Password: Hormuz@2026
+  * Click "Access Policy Portal"
+- Show the Situation Briefing card detailing current maritime disruptions.
+- ACTION: Click "Generate Policy Recommendations". Wait for the progress loader.
+- Scroll through the synthesized AI Policy Advisory list, highlighting cards 
+  categorized by priority (CRITICAL/HIGH/ELEVATED) such as activating SPR 
+  drawdowns or invoking strategic pacts.
+- ACTION: Click "Export PDF" or "Print" to save the ministerial advice.
+
+[Narration Script]
+"Finally, the Policy Maker portal acts as the AI Coordinator. Authenticated 
+users receive a synthesized strategic advisory brief. By correlating the 
+output of the risk, simulation, routing, and SPR agents, it generates 
+actionable, prioritized directives for ministerial review."
+================================================================================

@@ -44,15 +44,20 @@ const FALLBACK_ROUTES = [
 
 export default function DigitalTwin() {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [telemetryTick, setTelemetryTick] = useState(0);
   const [assets, setAssets] = useState<Asset[]>(FALLBACK_ASSETS);
   const [routes, setRoutes] = useState<any[]>(FALLBACK_ROUTES);
+  const [usingLiveData, setUsingLiveData] = useState(false);
+  const [fetchInFlight, setFetchInFlight] = useState(false);
+  const [fetchLatencyMs, setFetchLatencyMs] = useState<number | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
   const { corridors, lastUpdated, loading: liveLoading } = useLiveData();
 
   useEffect(() => {
     let active = true;
     const fetchData = async () => {
+      setFetchInFlight(true);
+      const startedAt = performance.now();
       try {
         const token = localStorage.getItem('pravah_access_token');
         const headers: Record<string, string> = {};
@@ -117,22 +122,28 @@ export default function DigitalTwin() {
         if (active && newAssets.length > 0) {
           setAssets(newAssets);
           if (newRoutes.length > 0) setRoutes(newRoutes);
+          setUsingLiveData(true);
+          setLastSyncAt(new Date().toISOString());
+        } else if (active) {
+          // Backend reachable but returned nothing usable, or unreachable —
+          // stay on whatever was already displayed (fallback on first load)
+          // rather than silently claiming a sync that didn't produce data.
+          setUsingLiveData(false);
         }
       } catch (e) {
         console.warn("Telemetry fetch failed", e);
+        if (active) setUsingLiveData(false);
+      } finally {
+        if (active) {
+          setFetchLatencyMs(Math.round(performance.now() - startedAt));
+          setFetchInFlight(false);
+        }
       }
     };
 
     fetchData();
     const t = setInterval(fetchData, 30000);
     return () => { active = false; clearInterval(t); };
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTelemetryTick(t => t + 1);
-    }, 2000);
-    return () => clearInterval(interval);
   }, []);
 
   const getStatusColor = (status: Asset['status']) => {
@@ -168,7 +179,7 @@ export default function DigitalTwin() {
             Digital Twin Telemetry
           </h1>
           <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 8, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-            Real-time geospatial state mirror of physical infrastructure and logistics. <span className="badge badge-info" style={{ marginLeft: 6 }}>{telemetryTick % 2 === 0 ? 'SYNCING...' : 'SYNCED'}</span>
+            Real-time geospatial state mirror of physical infrastructure and logistics. <span className="badge badge-info" style={{ marginLeft: 6 }}>{fetchInFlight ? 'SYNCING...' : (usingLiveData ? 'SYNCED · LIVE' : 'SYNCED · FALLBACK')}</span>
           </p>
         </div>
         <div style={{ display: 'flex', gap: 16 }}>
@@ -328,16 +339,16 @@ export default function DigitalTwin() {
             <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8', marginBottom: 12 }}>Network Health</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: '#f8fafc', fontWeight: 600 }}>Data Integrity</span>
-                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#34d399', fontWeight: 700 }}>99.9%</span>
+                <span style={{ fontSize: 12, color: '#f8fafc', fontWeight: 600 }}>Data Source</span>
+                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: usingLiveData ? '#34d399' : '#fbbf24', fontWeight: 700 }}>{usingLiveData ? 'LIVE' : 'FALLBACK'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: '#f8fafc', fontWeight: 600 }}>Latency</span>
-                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#60a5fa', fontWeight: 700 }}>24ms</span>
+                <span style={{ fontSize: 12, color: '#f8fafc', fontWeight: 600 }}>Fetch Latency</span>
+                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#60a5fa', fontWeight: 700 }}>{fetchLatencyMs !== null ? `${fetchLatencyMs}ms` : '—'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: '#f8fafc', fontWeight: 600 }}>Active Nodes</span>
-                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#f8fafc', fontWeight: 700 }}>1,204</span>
+                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#f8fafc', fontWeight: 700 }}>{assets.length}</span>
               </div>
             </div>
           </div>
@@ -347,12 +358,17 @@ export default function DigitalTwin() {
 
       {/* Footer / Telemetry stream */}
       <div style={{ height: 32, background: '#020617', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', padding: '0 24px', fontSize: 10, fontFamily: 'var(--font-mono)', color: '#64748b', gap: 24 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#34d399' }}><CheckCircle2 style={{ width: 12, height: 12 }} /> SECURE CONNECTION</span>
-        {/* eslint-disable-next-line react-hooks/purity */}
-        <span>ID: TWIN-{Math.random().toString(36).substring(2, 8).toUpperCase()}</span>
-        <span>UPTIME: 99.99%</span>
-        <span>LAT: 22.34 LON: 69.96</span>
-        <span style={{ flex: 1, textAlign: 'right', color: '#3b82f6' }}>AWAITING COMMAND OVERRIDE...</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: usingLiveData ? '#34d399' : '#fbbf24' }}><CheckCircle2 style={{ width: 12, height: 12 }} /> {usingLiveData ? 'LIVE CONNECTION' : 'FALLBACK MODE'}</span>
+        <span>NODES: {assets.length}</span>
+        <span>ROUTES: {routes.length}</span>
+        {selectedAsset ? (
+          <span>LAT: {selectedAsset.coordinates[1].toFixed(2)} LON: {selectedAsset.coordinates[0].toFixed(2)}</span>
+        ) : (
+          <span>SELECT A NODE FOR COORDINATES</span>
+        )}
+        <span style={{ flex: 1, textAlign: 'right', color: '#3b82f6' }}>
+          {lastSyncAt ? `LAST SYNC: ${new Date(lastSyncAt).toLocaleTimeString('en-IN', { hour12: false })} IST` : 'AWAITING FIRST SYNC...'}
+        </span>
       </div>
     </div>
   );
