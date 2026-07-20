@@ -274,11 +274,9 @@ refinery       = Literal["REF_JAMNAGAR", "REF_VADINAR", "REF_MUMBAI",
 
 ## 🎬 Demo Video
 
-> Replace `YOUTUBE_VIDEO_ID` once uploaded.
-
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=YOUTUBE_VIDEO_ID">
-    <img src="https://img.youtube.com/vi/YOUTUBE_VIDEO_ID/hqdefault.jpg" alt="Pravah Demo" width="700">
+  <a href="https://www.youtube.com/watch?v=mHEWgeToNRc">
+    <img src="https://img.youtube.com/vi/mHEWgeToNRc/hqdefault.jpg" alt="Pravah Demo" width="700">
   </a>
   <br/>
   <em>▶ Full cascade: Citizen → Command Center → Risk → Scenario → Procurement → SPR → Policy Maker</em>
